@@ -74,7 +74,7 @@ export const DEFAULT_ALIGNMENT_SECTIONS = [
     endSTA: '20+222.724',
     radius: 180,
     ratio: { un: 0, rt: 23, lt: 13 },
-    allowedTypes: ['R', 'L'], // Transition drawing spec
+    allowedTypes: ['R', 'L'],
   },
   {
     id: 'sec-2',
@@ -198,8 +198,6 @@ export function createNewVerticalElement() {
 /**
  * Calculate Lead Required (Horizontal Steering)
  * Formula: 6300 * Segment_Length_mm / (Radius * 1000)
- * Right curve (+), Left curve (-)
- * Transition sections: ramp linearly by distance progress (0.0 to 1.0)
  */
 export function calculateSectionLeadRequired({
   sectionType,
@@ -330,7 +328,7 @@ export function findBestRatioForSection(section, startKey = 'U4', startH = -20, 
  * AI SENIOR TUNNEL ENGINEER PLANNING ENGINE (10+ YEARS EXPERIENCE)
  * ----------------------------------------------------------------------------
  * Features:
- * 1. Active Alignment Convergence (Closed-Loop Feedback): Keeps TBM locked onto DTA centerline.
+ * 1. Active Alignment Convergence (PD Feedback): Keeps TBM locked onto DTA centerline.
  * 2. 4-Quadrant Tail Gap Dynamics: Simulates Left/Right/Top/Bottom tail shield gaps.
  * 3. Pinch Prevention: Actively relaxes harsh turns when Tail Gap < 15mm to prevent segment crush damage.
  * 4. Multi-Strategy Modes: 'senior_ai' (Free Ratio / Auto Recovery), 'auto_ratio', 'ratio_guided'.
@@ -384,7 +382,7 @@ export function runAdvancePlan({
 
     if (totalDistance < 0.1) return;
 
-    // Segment Allowed Types
+    // Segment Allowed Types (strictly enforced)
     const allowedTypes = Array.isArray(sec.allowedTypes) && sec.allowedTypes.length > 0
       ? sec.allowedTypes
       : ['U', 'R', 'L'];
@@ -414,7 +412,7 @@ export function runAdvancePlan({
       const ringNumFormatted = `R${String(currentRingNumber).padStart(4, '0')}`;
       const beforePos = KEY_DATA[currentKey]?.pos || parseInt(currentKey.replace(/\D/g, '') || '1', 10);
 
-      // STRICT FILTER: Candidates must be allowed types
+      // STRICT FILTER: Filter candidate keys by allowedTypes
       let availableCandidates = (NEXT_RING_TABLE[currentKey] || Object.keys(KEY_DATA))
         .filter((candKey) => {
           const t = KEY_DATA[candKey]?.type || candKey.charAt(0);
@@ -438,6 +436,10 @@ export function runAdvancePlan({
         const maxSTA = Math.max(vStart, vEnd);
         return currentSTAMeters >= minSTA - 0.1 && currentSTAMeters <= maxSTA + 0.1;
       });
+
+      // Current Deviation and Heading Error relative to DTA
+      const curDevMm = Number((((tbmX - dtaX) * Math.cos(dtaTheta) - (tbmY - dtaY) * Math.sin(dtaTheta)) * 1000).toFixed(1));
+      const headError = tbmTheta - dtaTheta;
 
       const totalSoFar = sectionUsed.U + sectionUsed.R + sectionUsed.L;
       const currentUnPct = totalSoFar > 0 ? sectionUsed.U / totalSoFar : 0;
@@ -474,7 +476,7 @@ export function runAdvancePlan({
 
         // ====================================================================
         // TAIL GAP DYNAMICS (Physical Clearance from Relative Articulation)
-        // K_shield = (Shield_Length / TBM_Diameter) * 0.45 = (4200 / 6300) * 0.45 = 0.30
+        // K_shield = (Shield_Length / TBM_Diameter) * 0.45 = 0.30
         // ====================================================================
         const gapL = Math.max(0.0, Math.min(100.0, Number((initGapL - 0.30 * afterH).toFixed(1))));
         const gapR = Math.max(0.0, Math.min(100.0, Number((initGapR + 0.30 * afterH).toFixed(1))));
@@ -486,23 +488,25 @@ export function runAdvancePlan({
         const isGapCrit = minGap < critGapLimit;
 
         // ====================================================================
-        // SENIOR TUNNEL ENGINEER SCORING MATRIX (10+ Years Experience)
+        // SENIOR TUNNEL ENGINEER CLOSED-LOOP CONTROL (PD Convergence + Gap Safety)
         // ====================================================================
         let suitScore = suitability === 'Yes' ? 300 : suitability === 'Fair' ? 100 : -1500;
 
-        // Senior Engineer Target Steering Corridor
-        let targetH = 0.0;
-        if (sec.direction === 'right') {
-          targetH = sec.sectionType === 'full_curve' 
-            ? -32.0 
-            : (sec.sectionType === 'transition_in' ? -32.0 * distanceProgress : -32.0 * (1.0 - distanceProgress));
-        } else if (sec.direction === 'left') {
-          targetH = sec.sectionType === 'full_curve' 
-            ? 32.0 
-            : (sec.sectionType === 'transition_in' ? 32.0 * distanceProgress : 32.0 * (1.0 - distanceProgress));
+        // 1. Base steady-state lead required to follow curvature
+        let baseTargetH = 0.0;
+        if (sec.direction === 'right' && leadReq > 0) {
+          baseTargetH = -0.72 * leadReq;
+        } else if (sec.direction === 'left' && leadReq < 0) {
+          baseTargetH = -0.72 * leadReq;
         }
 
-        const hScore = 220.0 - (Math.pow(Math.abs(afterH - targetH), 1.3)) * 2.5;
+        // 2. Active DTA Deviation & Heading Feedback correction
+        let devCorr = 0.40 * curDevMm + 1200.0 * headError;
+        devCorr = Math.max(-25.0, Math.min(25.0, devCorr));
+
+        const dynamicTargetH = baseTargetH + devCorr;
+
+        const hScore = 220.0 - (Math.pow(Math.abs(afterH - dynamicTargetH), 1.3)) * 2.5;
         const vScore = 160.0 - (Math.pow(Math.abs(afterV), 1.2)) * 2.0;
 
         // Tail Gap / Pinch Prevention Score
@@ -510,11 +514,11 @@ export function runAdvancePlan({
         if (isGapCrit) {
           gapScore = -6000.0; // Critical Pinch Danger!
         } else if (isGapWarn) {
-          gapScore = -1800.0 - (warnGapLimit - minGap) * 120.0; // Severe Warning!
+          gapScore = -1800.0 - (warnGapLimit - minGap) * 120.0; // Force Relief Key!
         } else if (minGap < 25.0) {
           gapScore = -(25.0 - minGap) * 15.0;
         } else {
-          gapScore = 70.0;
+          gapScore = 60.0;
         }
 
         // Ratio Guidance Score (Only used when ratio is enforced)
@@ -602,7 +606,7 @@ export function runAdvancePlan({
       tbmX += ringDistM * Math.sin(tbmTheta);
       tbmY += ringDistM * Math.cos(tbmTheta);
 
-      const deviationMm = Number(((tbmX - dtaX) * 1000).toFixed(1));
+      const deviationMm = Number((((tbmX - dtaX) * Math.cos(dtaTheta) - (tbmY - dtaY) * Math.sin(dtaTheta)) * 1000).toFixed(1));
 
       allPlannedRings.push({
         step: globalRingIndex,
@@ -679,7 +683,7 @@ export function runAdvancePlan({
   } else if (violationCount === 0) {
     verdictStatus = 'OPTIMAL';
     verdictMessage = `🎯 แผนสมบูรณ์แบบระดับวิศวกร 10+ ปี — ${totalRings} ริง (UN:${unCount} RT:${rtCount} LT:${ltCount}) แก็ปปลอดภัย (>15mm) และเกาะแนว DTA แม่นยำ`;
-    diagnosticAdvice.push('Tail Gap มีระยะเผื่อปลอดภัยตลอดเส้นทาง และ Lead ทุกลำดับอยู่ในช่วงที่เหมาะสม');
+    diagnosticAdvice.push('Tail Gap มีระยะเผื่อปลอดภัยตลอดเส้นทาง และ Deviation เกาะกึ่งกลางเส้น');
   } else {
     verdictStatus = 'WARNING';
     verdictMessage = `แผนใช้งานได้ดี — ${totalRings} ริง มี Lead เกินเล็กน้อย ${violationCount} ริง (สูงสุด ${maxObservedLead.toFixed(1)} mm)`;
