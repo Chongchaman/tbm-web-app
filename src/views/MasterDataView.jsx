@@ -33,8 +33,10 @@ import {
   createNewVerticalElement,
   parseSTA,
   formatSTA,
-  estimateRingCount
+  estimateRingCount,
+  DEFAULT_GAP_SETTINGS
 } from '../services/advancePlanner';
+import GapVisualizer from '../components/GapVisualizer';
 import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
 
 export default function MasterDataView({ onNavigate = () => {} }) {
@@ -60,6 +62,17 @@ export default function MasterDataView({ onNavigate = () => {} }) {
       console.error(e);
     }
     return DEFAULT_VERTICAL_ALIGNMENT;
+  });
+
+  // LocalStorage State for Tail Gap Settings
+  const [gapSettings, setGapSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tbm_gap_settings');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_GAP_SETTINGS;
   });
 
   const [savedSuccessMsg, setSavedSuccessMsg] = useState('');

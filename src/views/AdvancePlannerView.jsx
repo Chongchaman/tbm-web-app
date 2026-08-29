@@ -39,6 +39,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
+import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
 import { 
   DEFAULT_ALIGNMENT_SECTIONS, 
@@ -49,6 +50,7 @@ import {
   estimateRingCount,
   createNewSection,
   findBestRatioForSection,
+  DEFAULT_GAP_SETTINGS,
   formatSTA, 
   parseSTA,
   SEGMENT_SIZES 
@@ -95,7 +97,27 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     }
     return DEFAULT_VERTICAL_ALIGNMENT;
   });
-  const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'L2');
+
+  // Strategy Mode: 'senior_ai' (Free Ratio + Gap Safe) | 'auto_ratio' | 'ratio_guided'
+  const [strategy, setStrategy] = useState('senior_ai');
+
+  // Tail Gap Configuration
+  const [gapSettings, setGapSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tbm_gap_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.warnThreshold === 'number') return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_GAP_SETTINGS;
+  });
+
+  const [isGapDrawerOpen, setIsGapDrawerOpen] = useState(false);
+
+  const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'U4');
   const [startHLead, setStartHLead] = useState(lastRing ? lastRing.hLead : 0);
   const [startVLead, setStartVLead] = useState(lastRing ? lastRing.vLead : 0);
   const [maxTolerance, setMaxTolerance] = useState(55.0);
