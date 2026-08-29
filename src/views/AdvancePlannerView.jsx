@@ -68,7 +68,7 @@ ChartJS.register(
   Filler
 );
 
-export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {} }) {
+export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {}, onNavigate = () => {} }) {
   const lastRing = ringLogs.length > 0 ? ringLogs[ringLogs.length - 1] : null;
 
   // Sections State (Dynamic CRUD & LocalStorage sync with safe fallback)
@@ -116,6 +116,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   });
 
   const [isGapDrawerOpen, setIsGapDrawerOpen] = useState(false);
+  const [isSectionConfigExpanded, setIsSectionConfigExpanded] = useState(false);
 
   const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'U4');
   const [startHLead, setStartHLead] = useState(lastRing ? lastRing.hLead : 0);
@@ -688,47 +689,94 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         </div>
       </div>
 
-      {/* Dynamic Alignment Section Manager */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2">
-              <Layers size={16} className="text-acc" /> จัดการช่วง Alignment & อัตราส่วน (UN : RT : LT)
-            </h3>
-            <p className="text-xs text-text-muted">เพิ่ม/ลบช่วง และปรับสัดส่วน 2:1:0 หรือ 1:1:1 ได้อิสระ</p>
+      {/* Dynamic Alignment Section Summary & Setting Ratio Switcher */}
+      <div className="bg-surf-2 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2">
+                <Layers size={16} className="text-acc" /> ข้อมูลช่วง Alignment ({sections.length} ช่วง)
+              </h3>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                {sections.map(s => s.code).join(' → ')}
+              </span>
+            </div>
+            <p className="text-xs text-text-muted">
+              สัดส่วน Ratio และการอนุญาตใช้ Segment (UN/RT/LT) ถูกจัดการและบันทึกไว้ในหน้า <strong>Setting Ratio</strong>
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
             <button
               type="button"
-              onClick={handleLoadFromSettings}
-              className="btn btn-outline py-1.5 px-3 text-xs font-sans flex items-center gap-1.5 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/15"
-              title="Load saved Alignment from Settings"
+              onClick={() => onNavigate('masterdata')}
+              className="btn btn-yes py-2 px-3.5 text-xs font-sans font-bold flex items-center gap-1.5 shadow-lg"
             >
-              <Download size={14} /> โหลดจาก Settings
+              <Sliders size={14} />
+              <span>⚙️ ไปที่หน้า Setting Alignment & Ratio</span>
             </button>
 
             <button
               type="button"
-              onClick={handleSaveToSettings}
-              className="btn btn-outline py-1.5 px-3 text-xs font-sans flex items-center gap-1.5 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/15"
-              title="Save current Alignment to Settings"
+              onClick={() => setIsSectionConfigExpanded(p => !p)}
+              className={`btn btn-outline py-2 px-3 text-xs font-sans flex items-center gap-1.5 transition-all ${
+                isSectionConfigExpanded ? 'bg-white/10 text-white border-white/30' : 'text-text-muted hover:text-white'
+              }`}
             >
-              <Save size={14} /> บันทึกลง Settings
-            </button>
-
-            <button
-              type="button"
-              onClick={handleAddSection}
-              className="btn btn-outline py-1.5 px-3 text-xs font-bold flex items-center gap-1.5 border-purple-500/40 text-purple-300 hover:bg-purple-500/15"
-            >
-              <Plus size={15} /> + เพิ่มช่วง Alignment ใหม่
+              <SlidersHorizontal size={14} />
+              <span>{isSectionConfigExpanded ? 'ซ่อนการปรับแต่งด่วน' : '📐 ปรับแต่ง Ratio ด่วนในหน้านี้'}</span>
             </button>
           </div>
         </div>
 
-        {/* Section Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Compact Alignment Pipeline Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5 font-mono text-xs">
+          {sections.map((sec, idx) => (
+            <div key={sec.id || idx} className="p-2 bg-surf-3 rounded-xl border border-white/10 flex items-center gap-2">
+              <span className="font-bold text-acc">{sec.code}</span>
+              <span className="text-[11px] text-text-muted">
+                {sec.direction === 'right' ? 'โค้งขวา' : sec.direction === 'left' ? 'โค้งซ้าย' : 'ทางตรง'} (R={sec.radius}m)
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-black/40 text-text font-bold">
+                {sec.ratio ? `${sec.ratio.un}:${sec.ratio.rt}:${sec.ratio.lt}` : 'Auto'}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Collapsible Section Cards Grid */}
+        {isSectionConfigExpanded && (
+          <div className="pt-4 border-t border-white/10 space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-acc uppercase font-mono">
+                แผงแก้ไขสัดส่วนและข้อจำกัด Segment รายช่วง (Quick Editor):
+              </span>
+              <div className="flex items-center gap-2 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={handleLoadFromSettings}
+                  className="btn btn-outline py-1 px-2.5 text-xs text-cyan-300 border-cyan-500/30 flex items-center gap-1"
+                >
+                  <Download size={13} /> โหลดจาก Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToSettings}
+                  className="btn btn-outline py-1 px-2.5 text-xs text-emerald-300 border-emerald-500/30 flex items-center gap-1"
+                >
+                  <Save size={13} /> บันทึกลง Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddSection}
+                  className="btn btn-outline py-1 px-2.5 text-xs text-purple-300 border-purple-500/30 flex items-center gap-1"
+                >
+                  <Plus size={13} /> + เพิ่มช่วง
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sections.map((sec, idx) => {
             const estRings = estimateRingCount(sec.startSTA, sec.endSTA, sec.ratio);
             const breakdown = computeRatioBreakdown(sec.ratio, estRings || 1);
@@ -1000,6 +1048,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
             );
           })}
         </div>
+        </div>
+        )}
       </div>
 
       {/* Visual Simulation Display (Sub-tabs: 2D Map / Trajectory Chart / Sequence Table) */}

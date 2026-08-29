@@ -297,7 +297,7 @@ export default function App() {
                 transition={{ duration: 0.18 }}
               >
                 {activeTab === 'advanceplanner' && (
-                  <AdvancePlannerView ringLogs={ringLogs} onBatchSave={handleBatchSaveRings} />
+                  <AdvancePlannerView ringLogs={ringLogs} onBatchSave={handleBatchSaveRings} onNavigate={setActiveTab} />
                 )}
                 {activeTab === 'autoplanner' && (
                   <AutoPlannerView ringLogs={ringLogs} onBatchSave={handleBatchSaveRings} />

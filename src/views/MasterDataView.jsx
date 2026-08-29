@@ -227,7 +227,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               activeTab === 'horizontal' ? 'bg-acc text-black shadow-md' : 'text-text-muted hover:text-text'
             }`}
           >
-            <Compass size={14} /> แนวราบ (H Alignment)
+            <Compass size={14} /> แนวราบ & สัดส่วน Ratio (H Alignment & Ratio)
           </button>
           <button
             onClick={() => setActiveTab('vertical')}
@@ -566,6 +566,47 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                         />
                       </div>
                     </div>
+
+                    {/* Presets */}
+                    <div className="flex flex-wrap items-center gap-1 font-mono text-[9px] pt-1">
+                      {[
+                        { label: '3:1:0', r: { un: 3, rt: 1, lt: 0 } },
+                        { label: '2:1:0', r: { un: 2, rt: 1, lt: 0 } },
+                        { label: '1:1:1', r: { un: 1, rt: 1, lt: 1 } },
+                        { label: '0:23:13', r: { un: 0, rt: 23, lt: 13 } },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            const copy = [...hSections];
+                            copy[idx].ratio = {
+                              un: allowU ? preset.r.un : 0,
+                              rt: allowR ? preset.r.rt : 0,
+                              lt: allowL ? preset.r.lt : 0,
+                            };
+                            setHSections(copy);
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-surf-3 hover:bg-white/10 text-text-muted hover:text-white border border-white/5"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Auto Optimize Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const best = findBestRatioForSection(sec);
+                        const copy = [...hSections];
+                        copy[idx].ratio = best;
+                        setHSections(copy);
+                      }}
+                      className="w-full mt-1 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-bold text-[10px] flex items-center justify-center gap-1 transition-colors font-sans"
+                    >
+                      <Sparkles size={12} /> Auto-Optimize Ratio (ค้นหาอัตราส่วนที่ดีที่สุด)
+                    </button>
                   </div>
                 </div>
               );
