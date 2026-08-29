@@ -24,7 +24,10 @@ import {
   Eye,
   MapPin,
   Maximize2,
-  Save
+  Save,
+  Lock,
+  Unlock,
+  Boxes
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -729,7 +732,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
           </div>
         </div>
 
-        {/* Compact Alignment Pipeline Chips */}
+        {/* Compact Alignment Pipeline Chips with Lock Status */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5 font-mono text-xs">
           {sections.map((sec, idx) => (
             <div key={sec.id || idx} className="p-2 bg-surf-3 rounded-xl border border-white/10 flex items-center gap-2">
@@ -737,8 +740,20 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               <span className="text-[11px] text-text-muted">
                 {sec.direction === 'right' ? 'โค้งขวา' : sec.direction === 'left' ? 'โค้งซ้าย' : 'ทางตรง'} (R={sec.radius}m)
               </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-black/40 text-text font-bold">
-                {sec.ratio ? `${sec.ratio.un}:${sec.ratio.rt}:${sec.ratio.lt}` : 'Auto'}
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                sec.isLocked !== false
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+              }`}>
+                {sec.isLocked !== false ? (
+                  <>
+                    <Lock size={10} /> ล็อคยอด ({sec.ratio ? `${sec.ratio.un}:${sec.ratio.rt}:${sec.ratio.lt}` : '1:1:1'})
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={10} /> AI Auto
+                  </>
+                )}
               </span>
             </div>
           ))}

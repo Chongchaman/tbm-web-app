@@ -75,6 +75,8 @@ export const DEFAULT_ALIGNMENT_SECTIONS = [
     radius: 180,
     ratio: { un: 0, rt: 23, lt: 13 },
     allowedTypes: ['R', 'L'],
+    planningMode: 'locked_ratio',
+    isLocked: true,
   },
   {
     id: 'sec-2',
@@ -87,6 +89,8 @@ export const DEFAULT_ALIGNMENT_SECTIONS = [
     radius: 180,
     ratio: { un: 3, rt: 1, lt: 0 },
     allowedTypes: ['U', 'R'],
+    planningMode: 'locked_ratio',
+    isLocked: true,
   },
   {
     id: 'sec-3',
@@ -99,6 +103,8 @@ export const DEFAULT_ALIGNMENT_SECTIONS = [
     radius: 180,
     ratio: { un: 0, rt: 23, lt: 13 },
     allowedTypes: ['R', 'L'],
+    planningMode: 'locked_ratio',
+    isLocked: true,
   },
 ];
 
@@ -175,6 +181,8 @@ export function createNewSection(type = 'full_curve', dir = 'right', radius = 18
     radius: Number(radius) || 180,
     ratio: { un: 1, rt: 1, lt: 1 },
     allowedTypes: ['U', 'R', 'L'],
+    planningMode: 'locked_ratio', // 'locked_ratio' (Strict Factory/User Lock) | 'ai_senior' (AI Auto-Adaptive)
+    isLocked: true,
   };
 }
 
@@ -399,6 +407,12 @@ export function runAdvancePlan({
     const targetRtPct = ratioSum > 0 ? rt / ratioSum : (allowR ? 1 : 0);
     const targetLtPct = ratioSum > 0 ? lt / ratioSum : (allowL ? 1 : 0);
 
+    // Section-Level Planning Control Mode
+    const isSectionLocked = sec.isLocked === true || sec.planningMode === 'locked_ratio';
+    const isSectionAutoAI = sec.planningMode === 'ai_senior';
+    // If section is locked, we strictly enforce ratio even in global AI mode
+    const enforceRatioForThisSec = isSectionLocked || (!isSeniorAIMode && !isSectionAutoAI);
+
     let sectionRingIndex = 0;
     let sectionUsed = { U: 0, R: 0, L: 0 };
     let coveredDistance = 0;
@@ -521,18 +535,18 @@ export function runAdvancePlan({
           gapScore = 60.0;
         }
 
-        // Ratio Guidance Score (Only used when ratio is enforced)
+        // Ratio Guidance Score (Enforced if section is locked or global ratio mode)
         let ratioScore = 0.0;
-        if (!isSeniorAIMode) {
+        if (enforceRatioForThisSec) {
           const targetPctForType = candType === 'U' ? targetUnPct : candType === 'R' ? targetRtPct : targetLtPct;
           if (targetPctForType === 0) {
-            ratioScore = -450.0;
+            ratioScore = -600.0; // Strictly forbid types not in locked ratio
           } else if (totalSoFar > 0) {
             const currentPctForType = candType === 'U' ? currentUnPct : candType === 'R' ? currentRtPct : currentLtPct;
             const deficit = targetPctForType - currentPctForType;
-            ratioScore = deficit * 350.0;
+            ratioScore = deficit * (isSectionLocked ? 500.0 : 350.0);
           } else {
-            ratioScore = targetPctForType * 100.0;
+            ratioScore = targetPctForType * 150.0;
           }
         }
 

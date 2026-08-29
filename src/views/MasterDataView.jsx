@@ -22,7 +22,11 @@ import {
   ShieldAlert,
   Info,
   Check,
-  Ban
+  Ban,
+  Lock,
+  Unlock,
+  Package,
+  Boxes
 } from 'lucide-react';
 import { KEY_DATA, SUITABILITY_MATRIX, TBM_SPECS } from '../data/tbmConstants';
 import { calculateTaperGeometry } from '../services/calculator';
@@ -322,6 +326,75 @@ export default function MasterDataView({ onNavigate = () => {} }) {
             </div>
           </div>
 
+          {/* Total Factory Production & Segment Inventory Summary (BOQ) */}
+          <div className="bg-surf-3/80 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <Boxes size={18} className="text-acc" />
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">
+                  สรุปยอดรวมความต้องการ Segment ทั้งโครงการ (Factory Inventory & BOQ Estimation)
+                </h4>
+              </div>
+              <span className="text-[11px] text-text-muted font-mono">
+                คำนวณตามระยะทางและสัดส่วนที่ล็อกไว้ของทั้ง {hSections.length} ช่วง
+              </span>
+            </div>
+
+            {(() => {
+              let totalMeters = 0;
+              let totalRingsEst = 0;
+              let totalUN = 0;
+              let totalRT = 0;
+              let totalLT = 0;
+
+              hSections.forEach(sec => {
+                const dist = Math.abs(parseSTA(sec.endSTA) - parseSTA(sec.startSTA));
+                const est = estimateRingCount(sec.startSTA, sec.endSTA, sec.ratio);
+                const bd = computeRatioBreakdown(sec.ratio, est || 1);
+                totalMeters += dist;
+                totalRingsEst += est;
+                totalUN += bd.unCount;
+                totalRT += bd.rtCount;
+                totalLT += bd.ltCount;
+              });
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs">
+                  <div className="p-3 bg-surf-2 rounded-xl border border-white/5">
+                    <span className="text-[10px] text-text-muted uppercase block">ระยะทางรวมทั้งโครงการ</span>
+                    <span className="text-base font-bold text-acc mt-0.5 block">{totalMeters.toFixed(1)} m</span>
+                  </div>
+
+                  <div className="p-3 bg-surf-2 rounded-xl border border-white/5">
+                    <span className="text-[10px] text-text-muted uppercase block">จำนวนริงรวมประมาณ</span>
+                    <span className="text-base font-bold text-text mt-0.5 block">~{totalRingsEst} ริง</span>
+                  </div>
+
+                  <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/25">
+                    <span className="text-[10px] text-amber-300 uppercase block font-bold">ยอดผลิต UN (1.2m)</span>
+                    <span className="text-base font-bold text-amber-300 mt-0.5 block">
+                      {totalUN} ริง <span className="text-xs font-normal text-amber-400/80">({totalRingsEst > 0 ? (totalUN/totalRingsEst*100).toFixed(1) : 0}%)</span>
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/25">
+                    <span className="text-[10px] text-rose-300 uppercase block font-bold">ยอดผลิต RT (1.4m)</span>
+                    <span className="text-base font-bold text-rose-300 mt-0.5 block">
+                      {totalRT} ริง <span className="text-xs font-normal text-rose-400/80">({totalRingsEst > 0 ? (totalRT/totalRingsEst*100).toFixed(1) : 0}%)</span>
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/25">
+                    <span className="text-[10px] text-cyan-300 uppercase block font-bold">ยอดผลิต LT (1.4m)</span>
+                    <span className="text-base font-bold text-cyan-300 mt-0.5 block">
+                      {totalLT} ริง <span className="text-xs font-normal text-cyan-400/80">({totalRingsEst > 0 ? (totalLT/totalRingsEst*100).toFixed(1) : 0}%)</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Section Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {hSections.map((sec, idx) => {
@@ -362,14 +435,44 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteHSection(idx)}
-                      className="p-1 rounded text-text-muted hover:text-rose-400 hover:bg-white/5 transition-colors"
-                      title="Delete Section"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {/* Section Mode Toggle: Locked Ratio vs AI Adaptive */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const copy = [...hSections];
+                          const curLocked = copy[idx].isLocked !== false;
+                          copy[idx].isLocked = !curLocked;
+                          copy[idx].planningMode = !curLocked ? 'locked_ratio' : 'ai_senior';
+                          setHSections(copy);
+                        }}
+                        className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                          sec.isLocked !== false
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                        }`}
+                        title={sec.isLocked !== false ? 'ล็อคสัดส่วนตามยอดสั่งผลิต (AI จะไม่เปลี่ยนอัตราส่วน)' : 'ให้ AI Senior Engineer ปรับแต่ง Segment ให้อัตโนมัติ'}
+                      >
+                        {sec.isLocked !== false ? (
+                          <>
+                            <Lock size={11} /> ล็อคยอดสั่งผลิต
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={11} /> AI ปรับอัตโนมัติ
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHSection(idx)}
+                        className="p-1 rounded text-text-muted hover:text-rose-400 hover:bg-white/5 transition-colors"
+                        title="Delete Section"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Section Geometry Parameters */}
