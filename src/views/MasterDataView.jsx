@@ -38,6 +38,8 @@ import {
   parseSTA,
   formatSTA,
   estimateRingCount,
+  computeRatioBreakdown,
+  findBestRatioForSection,
   DEFAULT_GAP_SETTINGS
 } from '../services/advancePlanner';
 import GapVisualizer from '../components/GapVisualizer';
