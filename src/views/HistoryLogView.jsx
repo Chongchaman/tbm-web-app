@@ -390,7 +390,7 @@ export default function HistoryLogView({
 
             {/* Choose Delete Mode */}
             <div className="space-y-2.5 font-sans text-xs">
-              <label className="font-bold text-text-muted uppercase text-[11px] block">เลือกรูปแบบการลบ:</label>
+              <label className="font-bold text-text-muted uppercase text-xs block">เลือกรูปแบบการลบ:</label>
               
               <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                 deleteMode === 'selected'
@@ -406,7 +406,7 @@ export default function HistoryLogView({
                 />
                 <div>
                   <span className="font-bold block">1. ลบเฉพาะรายการที่ติ๊กเลือก ({selectedRingNums.size} ริง)</span>
-                  <span className="text-[11px] text-text-muted">ลบเฉพาะแถวที่มีเครื่องหมายถูกในตาราง</span>
+                  <span className="text-xs text-text-muted">ลบเฉพาะแถวที่มีเครื่องหมายถูกในตาราง</span>
                 </div>
               </label>
 
@@ -460,7 +460,7 @@ export default function HistoryLogView({
                 />
                 <div>
                   <span className="font-bold block text-rose-300">3. ลบข้อมูลริงทั้งหมด (Clear All Logs - {ringLogs.length} ริง)</span>
-                  <span className="text-[11px] text-text-muted">ลบประวัติทั้งหมดออกจากฐานข้อมูล</span>
+                  <span className="text-xs text-text-muted">ลบประวัติทั้งหมดออกจากฐานข้อมูล</span>
                 </div>
               </label>
             </div>

@@ -167,11 +167,11 @@ export default function DashboardView({ ringLogs = [] }) {
         {latestRing && (
           <div className="flex items-center gap-4 bg-surf-3 border border-white/10 px-5 py-3 rounded-xl font-mono">
             <div>
-              <span className="text-[10px] text-text-muted uppercase block">Latest Ring</span>
+              <span className="text-xs text-text-muted uppercase block">Latest Ring</span>
               <span className="text-xl font-black text-acc">{latestRing.ringNum}</span>
             </div>
             <div className="border-l border-white/10 pl-4">
-              <span className="text-[10px] text-text-muted uppercase block">Installed Key</span>
+              <span className="text-xs text-text-muted uppercase block">Installed Key</span>
               <span className="text-xl font-black text-emerald-400">{latestRing.key}</span>
             </div>
           </div>
@@ -184,7 +184,7 @@ export default function DashboardView({ ringLogs = [] }) {
           <div>
             <span className="text-xs text-text-muted uppercase font-mono">Total Rings Completed</span>
             <h3 className="text-3xl font-extrabold font-mono text-text mt-1">{stats.total}</h3>
-            <span className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
+            <span className="text-xs text-emerald-400 flex items-center gap-1 mt-1">
               <ArrowUpRight size={13} /> Target: 1,440 Rings
             </span>
           </div>
@@ -197,7 +197,7 @@ export default function DashboardView({ ringLogs = [] }) {
           <div>
             <span className="text-xs text-text-muted uppercase font-mono">Avg |H Lead| Dev</span>
             <h3 className="text-3xl font-extrabold font-mono text-acc mt-1">{stats.avgH} <span className="text-sm font-normal text-text-muted">mm</span></h3>
-            <span className="text-[11px] text-text-muted">Within &plusmn;50 mm limit</span>
+            <span className="text-xs text-text-muted">Within &plusmn;50 mm limit</span>
           </div>
           <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-cyan-400">
             <Compass size={24} />
@@ -208,7 +208,7 @@ export default function DashboardView({ ringLogs = [] }) {
           <div>
             <span className="text-xs text-text-muted uppercase font-mono">Avg |V Lead| Dev</span>
             <h3 className="text-3xl font-extrabold font-mono text-rose-400 mt-1">{stats.avgV} <span className="text-sm font-normal text-text-muted">mm</span></h3>
-            <span className="text-[11px] text-text-muted">Within &plusmn;50 mm limit</span>
+            <span className="text-xs text-text-muted">Within &plusmn;50 mm limit</span>
           </div>
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400">
             <TrendingUp size={24} />
@@ -223,7 +223,7 @@ export default function DashboardView({ ringLogs = [] }) {
               <span className="text-cyan-400 font-bold">L: {stats.lCount}</span>
               <span className="text-amber-400 font-bold">U: {stats.uCount}</span>
             </div>
-            <span className="text-[11px] text-text-muted mt-1 block">Balanced ring mix</span>
+            <span className="text-xs text-text-muted mt-1 block">Balanced ring mix</span>
           </div>
           <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
             <Activity size={24} />

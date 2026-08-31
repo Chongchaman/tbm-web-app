@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -10,9 +10,9 @@
   --color-yes: #00e676;
   --color-fair: #ffab40;
   --color-no: #ff5252;
-  --color-text: #f0f2f5;
-  --color-text-muted: #8a94a6;
-  --font-sans: 'Outfit', sans-serif;
+  --color-text: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --font-sans: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
@@ -21,16 +21,34 @@
   --surf: #0f121a;
   --surf-2: #161a24;
   --surf-3: #1c2230;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-acc: rgba(0, 212, 255, 0.25);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-acc: rgba(0, 212, 255, 0.35);
   --acc: #00d4ff;
   --acc-glow: rgba(0, 212, 255, 0.4);
   --purple: #a855f7;
   --yes: #00e676;
   --fair: #ffab40;
   --no: #ff5252;
-  --text: #f0f2f5;
-  --text-muted: #8a94a6;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+
+  /* Font Scaling Engine */
+  --base-font-size: 16px;
+  --base-line-height: 1.6;
+}
+
+/* Dynamic Font Size Presets */
+html[data-font-size="sm"] {
+  --base-font-size: 14px;
+}
+html[data-font-size="md"] {
+  --base-font-size: 16px;
+}
+html[data-font-size="lg"] {
+  --base-font-size: 18px;
+}
+html[data-font-size="xl"] {
+  --base-font-size: 20px;
 }
 
 * {
@@ -39,14 +57,20 @@
   padding: 0;
 }
 
+html {
+  font-size: var(--base-font-size);
+}
+
 body {
   background-color: var(--bg);
   color: var(--text);
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1rem;
+  line-height: var(--base-line-height);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.01em;
 }
 
 button, input, select, textarea {
@@ -56,46 +80,45 @@ button, input, select, textarea {
 
 /* Glassmorphism */
 .glass {
-  background: rgba(15, 18, 26, 0.75);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(15, 18, 26, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
 }
 
 .card {
   background: var(--surf);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.4);
   transition: all 0.2s ease;
 }
 
 .card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* Inputs */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .field label {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #cbd5e1;
+  letter-spacing: 0.3px;
 }
 
 .field input, .field select, .field textarea {
-  background: #05070a;
-  border: 1.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9px;
-  padding: 8px 12px;
-  font-size: 0.88rem;
+  background: #090d14;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   width: 100%;
@@ -103,11 +126,11 @@ button, input, select, textarea {
 
 .field input:focus, .field select:focus, .field textarea:focus {
   border-color: var(--acc);
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
 }
 
 .field .hint {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
@@ -117,10 +140,10 @@ button, input, select, textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 9px;
+  padding: 10px 18px;
+  border-radius: 10px;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.925rem;
   cursor: pointer;
   border: none;
   transition: all 0.2s ease;
@@ -137,7 +160,7 @@ button, input, select, textarea {
 }
 .btn-acc:hover {
   background: #33ddff;
-  box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.45);
 }
 
 .btn-yes {
@@ -146,21 +169,32 @@ button, input, select, textarea {
 }
 .btn-yes:hover {
   background: #33eb91;
-  box-shadow: 0 0 16px rgba(0, 230, 118, 0.4);
+  box-shadow: 0 0 18px rgba(0, 230, 118, 0.45);
 }
 
 .btn-outline {
   background: transparent;
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
   color: var(--text);
 }
 .btn-outline:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: var(--acc);
+  color: var(--acc);
+  background: rgba(0, 212, 255, 0.08);
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--surf-3); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: #273042;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--acc);
+}

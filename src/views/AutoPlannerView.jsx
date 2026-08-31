@@ -433,11 +433,11 @@ export default function AutoPlannerView({ ringLogs = [], onBatchSave = () => {} 
           {/* Card 3: Formula Spec Box */}
           <div className="bg-surf-3/90 border border-white/10 rounded-2xl p-4.5 space-y-2.5 font-mono text-xs">
             <div className="flex items-center justify-between text-text-muted pb-1.5 border-b border-white/5">
-              <span className="font-bold text-text uppercase text-[11px]">📐 Formula: Lead Request Calculation</span>
-              <span className="text-[10px] text-acc">Spec Rule #4</span>
+              <span className="font-bold text-text uppercase text-xs">📐 Formula: Lead Request Calculation</span>
+              <span className="text-xs text-acc">Spec Rule #4</span>
             </div>
             <div className="p-2.5 bg-surf-2 rounded-xl text-center space-y-1">
-              <div className="text-[11px] text-text-muted">
+              <div className="text-xs text-text-muted">
                 Lead request = 6300 &times; L / (R &times; 1000)
               </div>
               <div className="text-sm font-bold text-emerald-400">
@@ -458,33 +458,33 @@ export default function AutoPlannerView({ ringLogs = [], onBatchSave = () => {} 
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="card p-3.5">
-              <span className="text-[10px] text-text-muted uppercase font-mono">Planned Distance</span>
+              <span className="text-xs text-text-muted uppercase font-mono">Planned Distance</span>
               <h4 className="text-xl font-extrabold font-mono text-acc mt-0.5">{planResult.totalDistanceM} <span className="text-xs font-normal text-text-muted">m</span></h4>
-              <span className="text-[10px] text-text-muted">{planResult.ringCount} Rings &times; {segWidth}mm</span>
+              <span className="text-xs text-text-muted">{planResult.ringCount} Rings &times; {segWidth}mm</span>
             </div>
 
             <div className="card p-3.5">
-              <span className="text-[10px] text-text-muted uppercase font-mono">Target Lead Req.</span>
+              <span className="text-xs text-text-muted uppercase font-mono">Target Lead Req.</span>
               <h4 className="text-xl font-extrabold font-mono text-emerald-400 mt-0.5">
                 {planResult.leadRequest > 0 ? `+${planResult.leadRequest}` : planResult.leadRequest} <span className="text-xs font-normal text-text-muted">mm</span>
               </h4>
-              <span className="text-[10px] text-text-muted">{alignmentType.toUpperCase()} Alignment</span>
+              <span className="text-xs text-text-muted">{alignmentType.toUpperCase()} Alignment</span>
             </div>
 
             <div className="card p-3.5">
-              <span className="text-[10px] text-text-muted uppercase font-mono">Max Drift Error</span>
+              <span className="text-xs text-text-muted uppercase font-mono">Max Drift Error</span>
               <h4 className="text-xl font-extrabold font-mono text-amber-400 mt-0.5">{planResult.maxDrift} <span className="text-xs font-normal text-text-muted">mm</span></h4>
-              <span className="text-[10px] text-text-muted">Avg: {planResult.avgDrift} mm</span>
+              <span className="text-xs text-text-muted">Avg: {planResult.avgDrift} mm</span>
             </div>
 
             <div className="card p-3.5">
-              <span className="text-[10px] text-text-muted uppercase font-mono">Key Mix</span>
+              <span className="text-xs text-text-muted uppercase font-mono">Key Mix</span>
               <div className="flex gap-2 mt-1 font-mono text-xs">
                 <span className="text-rose-400 font-bold">R:{planResult.rCount}</span>
                 <span className="text-cyan-400 font-bold">L:{planResult.lCount}</span>
                 <span className="text-amber-400 font-bold">U:{planResult.uCount}</span>
               </div>
-              <span className="text-[10px] text-text-muted">Cross-type loop</span>
+              <span className="text-xs text-text-muted">Cross-type loop</span>
             </div>
           </div>
 
@@ -575,7 +575,7 @@ export default function AutoPlannerView({ ringLogs = [], onBatchSave = () => {} 
                       {r.selectedKey}
                     </span>
                   </td>
-                  <td className="p-3 text-[11px] font-sans">
+                  <td className="p-3 text-xs font-sans">
                     {r.type === 'R' ? 'Right' : r.type === 'L' ? 'Left' : 'Univ'}
                   </td>
                   <td className="p-3">
@@ -596,7 +596,7 @@ export default function AutoPlannerView({ ringLogs = [], onBatchSave = () => {} 
                   <td className={`p-3 font-bold ${r.totalDrift <= 30 ? 'text-emerald-400' : 'text-amber-400'}`}>
                     {r.totalDrift} mm
                   </td>
-                  <td className="p-3 text-[11px] text-text-muted truncate max-w-[180px]">
+                  <td className="p-3 text-xs text-text-muted truncate max-w-[180px]">
                     {r.notes}
                   </td>
                 </tr>

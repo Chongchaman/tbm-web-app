@@ -297,15 +297,15 @@ export default function PlannerView({ ringLogs = [], onSaveRing = () => {} }) {
                 {/* Computed Curve values display */}
                 <div className="bg-surf-3 rounded-xl p-3 grid grid-cols-3 gap-2 text-center text-xs border border-white/5 font-mono">
                   <div>
-                    <span className="text-[10px] text-text-muted block">Curve H Lead</span>
+                    <span className="text-xs text-text-muted block">Curve H Lead</span>
                     <span className="font-bold text-acc">{computedCurve.hLead > 0 ? `+${computedCurve.hLead}` : computedCurve.hLead} mm</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-text-muted block">Curve V Lead</span>
+                    <span className="text-xs text-text-muted block">Curve V Lead</span>
                     <span className="font-bold text-acc">{computedCurve.vLead > 0 ? `+${computedCurve.vLead}` : computedCurve.vLead} mm</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-text-muted block">Articulation</span>
+                    <span className="text-xs text-text-muted block">Articulation</span>
                     <span className="font-bold text-fair">{computedCurve.articulation}°</span>
                   </div>
                 </div>
@@ -475,7 +475,7 @@ export default function PlannerView({ ringLogs = [], onSaveRing = () => {} }) {
                             {cand.key}
                           </span>
                         </td>
-                        <td className="p-2.5 text-[11px] font-sans">
+                        <td className="p-2.5 text-xs font-sans">
                           {cand.type === 'R' ? 'Right' : cand.type === 'L' ? 'Left' : 'Univ'}
                         </td>
                         <td className="p-2.5">
@@ -497,7 +497,7 @@ export default function PlannerView({ ringLogs = [], onSaveRing = () => {} }) {
                               e.stopPropagation();
                               setSelectedCandidateKey(cand.key);
                             }}
-                            className={`px-2.5 py-1 rounded text-[11px] font-sans font-semibold transition-all ${
+                            className={`px-2.5 py-1 rounded text-xs font-sans font-semibold transition-all ${
                               isSelected
                                 ? 'bg-acc text-black shadow-md shadow-cyan-500/30'
                                 : 'bg-white/10 hover:bg-white/20 text-text'

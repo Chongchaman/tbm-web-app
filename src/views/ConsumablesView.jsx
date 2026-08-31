@@ -75,22 +75,22 @@ export default function ConsumablesView() {
         <div className="card">
           <span className="text-xs text-text-muted uppercase font-mono">Excavation Section Area</span>
           <h3 className="text-2xl font-extrabold font-mono text-acc mt-1">{foamResults.sectionArea} <span className="text-sm font-normal text-text-muted">m²</span></h3>
-          <span className="text-[11px] text-text-muted">Dia &empty; {tbmDia} mm</span>
+          <span className="text-xs text-text-muted">Dia &empty; {tbmDia} mm</span>
         </div>
         <div className="card">
           <span className="text-xs text-text-muted uppercase font-mono">Excavated Soil Per Ring</span>
           <h3 className="text-2xl font-extrabold font-mono text-emerald-400 mt-1">{foamResults.soilPerRing} <span className="text-sm font-normal text-text-muted">m³</span></h3>
-          <span className="text-[11px] text-text-muted">Width {segWidth} mm</span>
+          <span className="text-xs text-text-muted">Width {segWidth} mm</span>
         </div>
         <div className="card">
           <span className="text-xs text-text-muted uppercase font-mono">Excavation Time Per Ring</span>
           <h3 className="text-2xl font-extrabold font-mono text-amber-400 mt-1">{foamResults.excavationTime} <span className="text-sm font-normal text-text-muted">min</span></h3>
-          <span className="text-[11px] text-text-muted">Jack Speed {jackSpeed} mm/min</span>
+          <span className="text-xs text-text-muted">Jack Speed {jackSpeed} mm/min</span>
         </div>
         <div className="card">
           <span className="text-xs text-text-muted uppercase font-mono">Discharge Soil Flow</span>
           <h3 className="text-2xl font-extrabold font-mono text-purple-400 mt-1">{foamResults.dischargeSoilFlowLMin} <span className="text-sm font-normal text-text-muted">L/min</span></h3>
-          <span className="text-[11px] text-text-muted">{foamResults.dischargeSoilFlowM3Min} m³/min</span>
+          <span className="text-xs text-text-muted">{foamResults.dischargeSoilFlowM3Min} m³/min</span>
         </div>
       </div>
 
@@ -179,7 +179,7 @@ export default function ConsumablesView() {
               </div>
 
               {/* Port & Metric Breakdown */}
-              <div className="border-t border-white/5 pt-2 grid grid-cols-2 gap-2 text-[11px]">
+              <div className="border-t border-white/5 pt-2 grid grid-cols-2 gap-2 text-xs">
                 <div className="bg-surf-2 p-2 rounded-lg">
                   <span className="text-text-muted block">Foam Agent / Meter:</span>
                   <span className="font-bold text-acc">{foamResults.metrics.foamAgentPerMeter} L/m</span>
@@ -268,7 +268,7 @@ export default function ConsumablesView() {
             {/* Geological Sections Reference */}
             <div className="bg-surf-2 rounded-xl p-3 border border-white/5 space-y-2 text-xs">
               <span className="text-text-muted font-bold block">Geological Section Protocol (Sheet Reference):</span>
-              <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-mono">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
                 <div className="bg-surf-3 p-2 rounded">
                   <span className="text-text-muted block">Clay</span>
                   <span className="text-acc font-bold">2,800 m</span>

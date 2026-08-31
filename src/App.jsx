@@ -14,7 +14,8 @@ import {
   User,
   Cloud,
   CloudCheck,
-  CloudOff
+  CloudOff,
+  Type
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,6 +43,23 @@ export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isCloudConnected, setIsCloudConnected] = useState(isSupabaseConfigured());
+  const [fontSize, setFontSize] = useState(() => {
+    try {
+      return localStorage.getItem('tbm_font_size') || 'md';
+    } catch {
+      return 'md';
+    }
+  });
+
+  // Apply Font Size to Root
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-font-size', fontSize);
+      localStorage.setItem('tbm_font_size', fontSize);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [fontSize]);
 
   const [ringLogs, setRingLogs] = useState(() => {
     try {
@@ -258,6 +276,33 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Font Size Adjuster Control */}
+              <div className="flex items-center bg-surf-3/90 border border-white/10 rounded-xl p-1 gap-1 font-mono text-xs shadow-sm">
+                <span className="text-text-muted px-1.5 flex items-center gap-1 font-sans text-xs hidden md:flex font-semibold">
+                  <Type size={14} className="text-acc" /> ขนาดฟอนต์:
+                </span>
+                {[
+                  { id: 'sm', label: 'A-', title: 'กะทัดรัด (14px)' },
+                  { id: 'md', label: 'A', title: 'มาตรฐาน (16px)' },
+                  { id: 'lg', label: 'A+', title: 'ใหญ่ สบายตา (18px)' },
+                  { id: 'xl', label: 'A++', title: 'ใหญ่พิเศษ (20px)' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFontSize(f.id)}
+                    title={f.title}
+                    className={`px-2 py-1 rounded-lg font-bold transition-all text-xs ${
+                      fontSize === f.id
+                        ? 'bg-acc text-black shadow-md shadow-cyan-400/30'
+                        : 'text-text-muted hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Cloud Realtime Status Pill Button */}
               <button
                 type="button"

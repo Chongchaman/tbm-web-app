@@ -577,7 +577,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   Ratio & Steering Feasibility
                 </span>
                 <span
-                  className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${
+                  className={`px-2.5 py-0.5 rounded text-xs font-bold ${
                     verdict.status === 'OPTIMAL'
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       : verdict.status === 'WARNING'
@@ -600,7 +600,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
           <div className="flex flex-wrap items-center gap-3 bg-surf-3/80 px-4 py-2.5 rounded-xl border border-white/10 shrink-0 font-mono text-xs">
             <div>
-              <span className="text-[10px] text-text-muted uppercase block">Max Lead Seen</span>
+              <span className="text-xs text-text-muted uppercase block">Max Lead Seen</span>
               <span
                 className={`text-lg font-bold ${
                   planResult.maxObservedLead <= planResult.maxTolerance
@@ -612,11 +612,11 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               </span>
             </div>
             <div className="border-l border-white/10 pl-3">
-              <span className="text-[10px] text-text-muted uppercase block">Max DTA Dev</span>
+              <span className="text-xs text-text-muted uppercase block">Max DTA Dev</span>
               <span className="text-lg font-bold text-cyan-400">{planResult.maxDeviationMm} mm</span>
             </div>
             <div className="border-l border-white/10 pl-3">
-              <span className="text-[10px] text-text-muted uppercase block">Avg Risk Index</span>
+              <span className="text-xs text-text-muted uppercase block">Avg Risk Index</span>
               <span
                 className={`text-lg font-bold ${
                   (planResult.avgRiskIndex || 0) <= 25
@@ -630,11 +630,11 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               </span>
             </div>
             <div className="border-l border-white/10 pl-3">
-              <span className="text-[10px] text-text-muted uppercase block">Max Artic Angle</span>
+              <span className="text-xs text-text-muted uppercase block">Max Artic Angle</span>
               <span className="text-lg font-bold text-purple-400">{planResult.maxArticulationDeg || 0}&deg;</span>
             </div>
             <div className="border-l border-white/10 pl-3">
-              <span className="text-[10px] text-text-muted uppercase block">Violations (&gt;55mm)</span>
+              <span className="text-xs text-text-muted uppercase block">Violations (&gt;55mm)</span>
               <span
                 className={`text-lg font-bold ${
                   planResult.violationCount === 0 ? 'text-emerald-400' : 'text-amber-400'
@@ -704,7 +704,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                 onChange={(e) => { setMaxTolerance(Number(e.target.value)); markDirty(); }}
                 className="w-12 bg-transparent font-bold text-text outline-none text-center"
               />
-              <span className="text-[10px] text-text-muted">mm</span>
+              <span className="text-xs text-text-muted">mm</span>
             </div>
           </div>
 
@@ -740,7 +740,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2">
                 <Layers size={16} className="text-acc" /> ข้อมูลช่วง Alignment ({sections.length} ช่วง)
               </h3>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+              <span className="px-2 py-0.5 rounded text-xs font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
                 {sections.map(s => s.code).join(' → ')}
               </span>
             </div>
@@ -777,10 +777,10 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
           {sections.map((sec, idx) => (
             <div key={sec.id || idx} className="p-2 bg-surf-3 rounded-xl border border-white/10 flex items-center gap-2">
               <span className="font-bold text-acc">{sec.code}</span>
-              <span className="text-[11px] text-text-muted">
+              <span className="text-xs text-text-muted">
                 {sec.direction === 'right' ? 'โค้งขวา' : sec.direction === 'left' ? 'โค้งซ้าย' : 'ทางตรง'} (R={sec.radius}m)
               </span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+              <span className={`px-1.5 py-0.5 rounded text-xs font-bold flex items-center gap-1 ${
                 sec.isLocked !== false
                   ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
                   : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
@@ -878,9 +878,9 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                 </div>
 
                 {/* Section Type & Direction Inputs */}
-                <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                   <div className="field">
-                    <label className="text-[9px]">Type</label>
+                    <label className="text-xs">Type</label>
                     <select
                       value={sec.sectionType}
                       onChange={(e) => {
@@ -889,7 +889,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         setSections(copy);
                         markDirty();
                       }}
-                      className="bg-surf-3 border border-white/10 text-text text-[11px] p-1.5 rounded outline-none"
+                      className="bg-surf-3 border border-white/10 text-text text-xs p-1.5 rounded outline-none"
                     >
                       <option value="full_curve">Full Curve</option>
                       <option value="transition_in">Transition (In)</option>
@@ -899,7 +899,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   </div>
 
                   <div className="field">
-                    <label className="text-[9px]">Direction</label>
+                    <label className="text-xs">Direction</label>
                     <select
                       value={sec.direction}
                       onChange={(e) => {
@@ -908,7 +908,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         setSections(copy);
                         markDirty();
                       }}
-                      className="bg-surf-3 border border-white/10 text-text text-[11px] p-1.5 rounded outline-none"
+                      className="bg-surf-3 border border-white/10 text-text text-xs p-1.5 rounded outline-none"
                     >
                       <option value="right">Right (ขวา)</option>
                       <option value="left">Left (ซ้าย)</option>
@@ -917,7 +917,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   </div>
 
                   <div className="field">
-                    <label className="text-[9px]">Radius (m)</label>
+                    <label className="text-xs">Radius (m)</label>
                     <input
                       type="number"
                       value={sec.radius}
@@ -927,15 +927,15 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         setSections(copy);
                         markDirty();
                       }}
-                      className="bg-surf-3 border border-white/10 text-amber-400 font-bold text-[11px] p-1.5 rounded text-center outline-none"
+                      className="bg-surf-3 border border-white/10 text-amber-400 font-bold text-xs p-1.5 rounded text-center outline-none"
                     />
                   </div>
                 </div>
 
                 {/* STA Inputs (Editable) & Estimated Info */}
-                <div className="grid grid-cols-2 gap-2 font-mono text-[11px] bg-surf-3/60 p-2.5 rounded-xl border border-white/5">
+                <div className="grid grid-cols-2 gap-2 font-mono text-xs bg-surf-3/60 p-2.5 rounded-xl border border-white/5">
                   <div>
-                    <span className="text-text-muted text-[10px] block">Start STA</span>
+                    <span className="text-text-muted text-xs block">Start STA</span>
                     <input
                       type="text"
                       value={sec.startSTA}
@@ -950,7 +950,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                     />
                   </div>
                   <div>
-                    <span className="text-text-muted text-[10px] block">End STA</span>
+                    <span className="text-text-muted text-xs block">End STA</span>
                     <input
                       type="text"
                       value={sec.endSTA}
@@ -965,7 +965,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                     />
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-text-muted px-1">
+                <div className="flex items-center justify-between text-xs font-mono text-text-muted px-1">
                   <span>ระยะทาง: <strong className="text-text">{Math.abs(parseSTA(sec.endSTA) - parseSTA(sec.startSTA)).toFixed(1)}m</strong></span>
                   <span>~<strong className="text-text">{estimateRingCount(sec.startSTA, sec.endSTA, sec.ratio)}</strong> ริง (ประมาณ)</span>
                 </div>
@@ -978,9 +978,9 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   const allowL = allowed.includes('L');
 
                   return (
-                    <div className="space-y-1.5 pt-2 border-t border-white/5 font-mono text-[10px]">
+                    <div className="space-y-1.5 pt-2 border-t border-white/5 font-mono text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-text-muted font-bold uppercase">
+                        <span className="text-xs text-text-muted font-bold uppercase">
                           อนุญาตการใช้ Segment (ห้ามใช้):
                         </span>
                       </div>
@@ -1026,17 +1026,17 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                 {/* Custom Ratio Controls */}
                 <div className="space-y-2 pt-1 border-t border-white/5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-text-muted uppercase text-[10px]">
+                    <span className="font-bold text-text-muted uppercase text-xs">
                       อัตราส่วน (UN : RT : LT)
                     </span>
-                    <span className="font-mono font-bold text-acc bg-surf-3 px-2 py-0.5 rounded border border-white/5 text-[10px]">
+                    <span className="font-mono font-bold text-acc bg-surf-3 px-2 py-0.5 rounded border border-white/5 text-xs">
                       {breakdown.ratioStr}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-1.5 font-mono">
                     <div className="bg-surf-3 p-1.5 rounded-lg border border-amber-500/30 text-center">
-                      <span className="text-[9px] text-amber-300 font-bold block">UN (1.2m)</span>
+                      <span className="text-xs text-amber-300 font-bold block">UN (1.2m)</span>
                       <input
                         type="number"
                         min="0"
@@ -1044,11 +1044,11 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         onChange={(e) => updateSectionRatio(idx, 'un', e.target.value)}
                         className="w-full bg-transparent text-amber-400 font-black text-base text-center outline-none"
                       />
-                      <span className="text-[8px] text-text-muted block">{breakdown.unCount} ริง ({breakdown.unPct}%)</span>
+                      <span className="text-xs text-text-muted block">{breakdown.unCount} ริง ({breakdown.unPct}%)</span>
                     </div>
 
                     <div className="bg-surf-3 p-1.5 rounded-lg border border-rose-500/30 text-center">
-                      <span className="text-[9px] text-rose-300 font-bold block">RT (1.4m)</span>
+                      <span className="text-xs text-rose-300 font-bold block">RT (1.4m)</span>
                       <input
                         type="number"
                         min="0"
@@ -1056,11 +1056,11 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         onChange={(e) => updateSectionRatio(idx, 'rt', e.target.value)}
                         className="w-full bg-transparent text-rose-400 font-black text-base text-center outline-none"
                       />
-                      <span className="text-[8px] text-text-muted block">{breakdown.rtCount} ริง ({breakdown.rtPct}%)</span>
+                      <span className="text-xs text-text-muted block">{breakdown.rtCount} ริง ({breakdown.rtPct}%)</span>
                     </div>
 
                     <div className="bg-surf-3 p-1.5 rounded-lg border border-cyan-500/30 text-center">
-                      <span className="text-[9px] text-cyan-300 font-bold block">LT (1.4m)</span>
+                      <span className="text-xs text-cyan-300 font-bold block">LT (1.4m)</span>
                       <input
                         type="number"
                         min="0"
@@ -1068,12 +1068,12 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         onChange={(e) => updateSectionRatio(idx, 'lt', e.target.value)}
                         className="w-full bg-transparent text-cyan-400 font-black text-base text-center outline-none"
                       />
-                      <span className="text-[8px] text-text-muted block">{breakdown.ltCount} ริง ({breakdown.ltPct}%)</span>
+                      <span className="text-xs text-text-muted block">{breakdown.ltCount} ริง ({breakdown.ltPct}%)</span>
                     </div>
                   </div>
 
                   {/* Preset Pills */}
-                  <div className="flex flex-wrap gap-1 font-mono text-[9px] pt-0.5">
+                  <div className="flex flex-wrap gap-1 font-mono text-xs pt-0.5">
                     {RATIO_PRESETS.slice(0, 4).map((p) => (
                       <button
                         key={p.label}
@@ -1094,7 +1094,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   <button
                     type="button"
                     onClick={() => handleAutoOptimizeRatio(idx)}
-                    className="w-full mt-2 py-1.5 rounded bg-purple-500/20 text-purple-300 font-bold text-[10px] border border-purple-500/30 hover:bg-purple-500/30 flex justify-center items-center gap-1.5 transition-all"
+                    className="w-full mt-2 py-1.5 rounded bg-purple-500/20 text-purple-300 font-bold text-xs border border-purple-500/30 hover:bg-purple-500/30 flex justify-center items-center gap-1.5 transition-all"
                   >
                     <Sparkles size={13} /> Auto-Optimize Ratio (ค้นหาอัตราส่วนที่ดีที่สุด)
                   </button>
@@ -1225,7 +1225,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                         >
                           {r.selectedKey}
                         </span>
-                        <span className="text-[10px] text-text-muted ml-1">({r.sizeM}m)</span>
+                        <span className="text-xs text-text-muted ml-1">({r.sizeM}m)</span>
                       </td>
                       <td className="p-2.5">
                         <KeySuitabilityBadge suitability={r.suitability} size="sm" />
@@ -1243,13 +1243,13 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                       <td className="p-2.5 text-cyan-400 font-bold">
                         {r.deviationMm > 0 ? `+${r.deviationMm}` : r.deviationMm} mm
                       </td>
-                      <td className="p-2.5 font-mono text-[11px]">
+                      <td className="p-2.5 font-mono text-xs">
                         <span className={r.gapL < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>L:{r.gapL}</span> /{' '}
                         <span className={r.gapR < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>R:{r.gapR}</span>
                       </td>
                       <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded border text-[11px] font-bold ${riskColor}`}>
-                          {r.riskIndex}<span className="text-[9px] opacity-70">/100</span>
+                        <span className={`px-2 py-0.5 rounded border text-xs font-bold ${riskColor}`}>
+                          {r.riskIndex}<span className="text-xs opacity-70">/100</span>
                         </span>
                       </td>
                       <td className="p-2.5 font-sans text-xs text-text-muted max-w-xs truncate" title={r.aiReasoning}>

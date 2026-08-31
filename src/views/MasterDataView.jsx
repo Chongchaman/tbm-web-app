@@ -337,7 +337,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   สรุปยอดรวมความต้องการ Segment ทั้งโครงการ (Factory Inventory & BOQ Estimation)
                 </h4>
               </div>
-              <span className="text-[11px] text-text-muted font-mono">
+              <span className="text-xs text-text-muted font-mono">
                 คำนวณตามระยะทางและสัดส่วนที่ล็อกไว้ของทั้ง {hSections.length} ช่วง
               </span>
             </div>
@@ -363,31 +363,31 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               return (
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs">
                   <div className="p-3 bg-surf-2 rounded-xl border border-white/5">
-                    <span className="text-[10px] text-text-muted uppercase block">ระยะทางรวมทั้งโครงการ</span>
+                    <span className="text-xs text-text-muted uppercase block">ระยะทางรวมทั้งโครงการ</span>
                     <span className="text-base font-bold text-acc mt-0.5 block">{totalMeters.toFixed(1)} m</span>
                   </div>
 
                   <div className="p-3 bg-surf-2 rounded-xl border border-white/5">
-                    <span className="text-[10px] text-text-muted uppercase block">จำนวนริงรวมประมาณ</span>
+                    <span className="text-xs text-text-muted uppercase block">จำนวนริงรวมประมาณ</span>
                     <span className="text-base font-bold text-text mt-0.5 block">~{totalRingsEst} ริง</span>
                   </div>
 
                   <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/25">
-                    <span className="text-[10px] text-amber-300 uppercase block font-bold">ยอดผลิต UN (1.2m)</span>
+                    <span className="text-xs text-amber-300 uppercase block font-bold">ยอดผลิต UN (1.2m)</span>
                     <span className="text-base font-bold text-amber-300 mt-0.5 block">
                       {totalUN} ริง <span className="text-xs font-normal text-amber-400/80">({totalRingsEst > 0 ? (totalUN/totalRingsEst*100).toFixed(1) : 0}%)</span>
                     </span>
                   </div>
 
                   <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/25">
-                    <span className="text-[10px] text-rose-300 uppercase block font-bold">ยอดผลิต RT (1.4m)</span>
+                    <span className="text-xs text-rose-300 uppercase block font-bold">ยอดผลิต RT (1.4m)</span>
                     <span className="text-base font-bold text-rose-300 mt-0.5 block">
                       {totalRT} ริง <span className="text-xs font-normal text-rose-400/80">({totalRingsEst > 0 ? (totalRT/totalRingsEst*100).toFixed(1) : 0}%)</span>
                     </span>
                   </div>
 
                   <div className="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/25">
-                    <span className="text-[10px] text-cyan-300 uppercase block font-bold">ยอดผลิต LT (1.4m)</span>
+                    <span className="text-xs text-cyan-300 uppercase block font-bold">ยอดผลิต LT (1.4m)</span>
                     <span className="text-base font-bold text-cyan-300 mt-0.5 block">
                       {totalLT} ริง <span className="text-xs font-normal text-cyan-400/80">({totalRingsEst > 0 ? (totalLT/totalRingsEst*100).toFixed(1) : 0}%)</span>
                     </span>
@@ -448,7 +448,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           copy[idx].planningMode = !curLocked ? 'locked_ratio' : 'ai_senior';
                           setHSections(copy);
                         }}
-                        className={`px-2 py-1 rounded-lg font-mono text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                        className={`px-2 py-1 rounded-lg font-mono text-xs font-bold flex items-center gap-1 border transition-all ${
                           sec.isLocked !== false
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                             : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
@@ -478,9 +478,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   </div>
 
                   {/* Section Geometry Parameters */}
-                  <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                  <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                     <div className="field">
-                      <label className="text-[9px] text-text-muted block">Type</label>
+                      <label className="text-xs text-text-muted block">Type</label>
                       <select
                         value={sec.sectionType}
                         onChange={(e) => {
@@ -488,7 +488,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           copy[idx].sectionType = e.target.value;
                           setHSections(copy);
                         }}
-                        className="w-full bg-surf-3 border border-white/10 text-text text-[11px] p-1.5 rounded outline-none"
+                        className="w-full bg-surf-3 border border-white/10 text-text text-xs p-1.5 rounded outline-none"
                       >
                         <option value="full_curve">Full Curve</option>
                         <option value="transition_in">Transition (In)</option>
@@ -498,7 +498,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     </div>
 
                     <div className="field">
-                      <label className="text-[9px] text-text-muted block">Direction</label>
+                      <label className="text-xs text-text-muted block">Direction</label>
                       <select
                         value={sec.direction}
                         onChange={(e) => {
@@ -506,7 +506,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           copy[idx].direction = e.target.value;
                           setHSections(copy);
                         }}
-                        className="w-full bg-surf-3 border border-white/10 text-text text-[11px] p-1.5 rounded outline-none"
+                        className="w-full bg-surf-3 border border-white/10 text-text text-xs p-1.5 rounded outline-none"
                       >
                         <option value="right">Right (ขวา)</option>
                         <option value="left">Left (ซ้าย)</option>
@@ -515,7 +515,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     </div>
 
                     <div className="field">
-                      <label className="text-[9px] text-text-muted block">Radius (m)</label>
+                      <label className="text-xs text-text-muted block">Radius (m)</label>
                       <input
                         type="number"
                         value={sec.radius}
@@ -524,15 +524,15 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           copy[idx].radius = Number(e.target.value) || 0;
                           setHSections(copy);
                         }}
-                        className="w-full bg-surf-3 border border-white/10 text-amber-400 font-bold text-[11px] p-1.5 rounded text-center outline-none"
+                        className="w-full bg-surf-3 border border-white/10 text-amber-400 font-bold text-xs p-1.5 rounded text-center outline-none"
                       />
                     </div>
                   </div>
 
                   {/* STA Range Inputs */}
-                  <div className="grid grid-cols-2 gap-2 font-mono text-[11px] bg-surf-3/60 p-2.5 rounded-xl border border-white/5">
+                  <div className="grid grid-cols-2 gap-2 font-mono text-xs bg-surf-3/60 p-2.5 rounded-xl border border-white/5">
                     <div>
-                      <span className="text-text-muted text-[10px] block">Start STA</span>
+                      <span className="text-text-muted text-xs block">Start STA</span>
                       <input
                         type="text"
                         value={sec.startSTA}
@@ -545,7 +545,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       />
                     </div>
                     <div>
-                      <span className="text-text-muted text-[10px] block">End STA</span>
+                      <span className="text-text-muted text-xs block">End STA</span>
                       <input
                         type="text"
                         value={sec.endSTA}
@@ -559,7 +559,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono text-text-muted px-1">
+                  <div className="flex items-center justify-between text-xs font-mono text-text-muted px-1">
                     <span>ระยะทาง: <strong className="text-text">{dist.toFixed(1)}m</strong></span>
                     <span>~<strong className="text-text">{estRings}</strong> ริง (ประมาณ)</span>
                   </div>
@@ -567,12 +567,12 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   {/* Segment Restriction Controls */}
                   <div className="space-y-2 pt-2 border-t border-white/5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-text-muted uppercase text-[10px] flex items-center gap-1">
+                      <span className="font-bold text-text-muted uppercase text-xs flex items-center gap-1">
                         <Ban size={12} className="text-rose-400" /> กฎการเลือกใช้ Segment:
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 font-mono text-[10px]">
+                    <div className="grid grid-cols-3 gap-1.5 font-mono text-xs">
                       {/* UN Toggle */}
                       <button
                         type="button"
@@ -584,7 +584,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                         }`}
                       >
                         <span>{allowU ? '✅ อนุญาต UN' : '🚫 ห้ามใช้ UN'}</span>
-                        <span className="text-[9px] opacity-75">(1.2m)</span>
+                        <span className="text-xs opacity-75">(1.2m)</span>
                       </button>
 
                       {/* RT Toggle */}
@@ -598,7 +598,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                         }`}
                       >
                         <span>{allowR ? '✅ อนุญาต RT' : '🚫 ห้ามใช้ RT'}</span>
-                        <span className="text-[9px] opacity-75">(1.4m)</span>
+                        <span className="text-xs opacity-75">(1.4m)</span>
                       </button>
 
                       {/* LT Toggle */}
@@ -612,19 +612,19 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                         }`}
                       >
                         <span>{allowL ? '✅ อนุญาต LT' : '🚫 ห้ามใช้ LT'}</span>
-                        <span className="text-[9px] opacity-75">(1.4m)</span>
+                        <span className="text-xs opacity-75">(1.4m)</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Ratio Inputs */}
                   <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] text-text-muted uppercase block font-bold">
+                    <span className="text-xs text-text-muted uppercase block font-bold">
                       สัดส่วนเป้าหมาย (Target Ratio):
                     </span>
                     <div className="grid grid-cols-3 gap-1.5 font-mono">
                       <div className={`p-1.5 rounded-lg border text-center ${allowU ? 'bg-surf-3 border-amber-500/30' : 'bg-surf-3/30 border-white/5 opacity-40'}`}>
-                        <span className="text-[9px] text-amber-300 block font-bold">UN</span>
+                        <span className="text-xs text-amber-300 block font-bold">UN</span>
                         <input
                           type="number"
                           min="0"
@@ -640,7 +640,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       </div>
 
                       <div className={`p-1.5 rounded-lg border text-center ${allowR ? 'bg-surf-3 border-rose-500/30' : 'bg-surf-3/30 border-white/5 opacity-40'}`}>
-                        <span className="text-[9px] text-rose-300 block font-bold">RT</span>
+                        <span className="text-xs text-rose-300 block font-bold">RT</span>
                         <input
                           type="number"
                           min="0"
@@ -656,7 +656,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       </div>
 
                       <div className={`p-1.5 rounded-lg border text-center ${allowL ? 'bg-surf-3 border-cyan-500/30' : 'bg-surf-3/30 border-white/5 opacity-40'}`}>
-                        <span className="text-[9px] text-cyan-300 block font-bold">LT</span>
+                        <span className="text-xs text-cyan-300 block font-bold">LT</span>
                         <input
                           type="number"
                           min="0"
@@ -673,7 +673,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     </div>
 
                     {/* Presets */}
-                    <div className="flex flex-wrap items-center gap-1 font-mono text-[9px] pt-1">
+                    <div className="flex flex-wrap items-center gap-1 font-mono text-xs pt-1">
                       {[
                         { label: '3:1:0', r: { un: 3, rt: 1, lt: 0 } },
                         { label: '2:1:0', r: { un: 2, rt: 1, lt: 0 } },
@@ -708,7 +708,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                         copy[idx].ratio = best;
                         setHSections(copy);
                       }}
-                      className="w-full mt-1 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-bold text-[10px] flex items-center justify-center gap-1 transition-colors font-sans"
+                      className="w-full mt-1 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-bold text-xs flex items-center justify-center gap-1 transition-colors font-sans"
                     >
                       <Sparkles size={12} /> Auto-Optimize Ratio (ค้นหาอัตราส่วนที่ดีที่สุด)
                     </button>
@@ -812,9 +812,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                 </div>
 
                 {/* STA Range */}
-                <div className="grid grid-cols-2 gap-2 font-mono text-[11px] bg-surf-3/60 p-2 rounded-xl border border-white/5">
+                <div className="grid grid-cols-2 gap-2 font-mono text-xs bg-surf-3/60 p-2 rounded-xl border border-white/5">
                   <div>
-                    <span className="text-text-muted text-[10px] block">Start STA</span>
+                    <span className="text-text-muted text-xs block">Start STA</span>
                     <input
                       type="text"
                       value={elem.startSTA}
@@ -827,7 +827,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     />
                   </div>
                   <div>
-                    <span className="text-text-muted text-[10px] block">End STA</span>
+                    <span className="text-text-muted text-xs block">End STA</span>
                     <input
                       type="text"
                       value={elem.endSTA}
@@ -842,9 +842,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                 </div>
 
                 {/* Elevation & Grade */}
-                <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                   <div>
-                    <span className="text-text-muted text-[10px] block">Start Elev (m)</span>
+                    <span className="text-text-muted text-xs block">Start Elev (m)</span>
                     <input
                       type="number"
                       step="0.001"
@@ -859,7 +859,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   </div>
 
                   <div>
-                    <span className="text-text-muted text-[10px] block">End Elev (m)</span>
+                    <span className="text-text-muted text-xs block">End Elev (m)</span>
                     <input
                       type="number"
                       step="0.001"
@@ -874,7 +874,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   </div>
 
                   <div>
-                    <span className="text-text-muted text-[10px] block">Grade (%)</span>
+                    <span className="text-text-muted text-xs block">Grade (%)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -892,9 +892,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                 </div>
 
                 {/* Curve Type & Radius */}
-                <div className="grid grid-cols-2 gap-2 font-mono text-[11px] pt-1">
+                <div className="grid grid-cols-2 gap-2 font-mono text-xs pt-1">
                   <div>
-                    <span className="text-text-muted text-[10px] block">Vertical Curve</span>
+                    <span className="text-text-muted text-xs block">Vertical Curve</span>
                     <select
                       value={elem.curveType}
                       onChange={(e) => {
@@ -911,7 +911,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   </div>
 
                   <div>
-                    <span className="text-text-muted text-[10px] block">Radius Rv (m)</span>
+                    <span className="text-text-muted text-xs block">Radius Rv (m)</span>
                     <input
                       type="number"
                       value={elem.radiusV}
@@ -1005,7 +1005,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       return (
                         <td key={next} className="p-1">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold block ${
+                            className={`px-1.5 py-0.5 rounded text-xs font-bold block ${
                               suit === 'Yes'
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                 : suit === 'Fair'
@@ -1073,8 +1073,8 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               const geom = dynamicGeometry[pos] || { hLead: 0, vLead: 0, angle: 0 };
               return (
                 <div key={pos} className="bg-surf-2 border border-white/10 p-2.5 rounded-xl text-center space-y-1">
-                  <span className="text-[11px] font-bold text-acc block">Pos {pos} ({geom.angle}&deg;)</span>
-                  <div className="text-[10px] text-text-muted space-y-0.5">
+                  <span className="text-xs font-bold text-acc block">Pos {pos} ({geom.angle}&deg;)</span>
+                  <div className="text-xs text-text-muted space-y-0.5">
                     <div>H: <strong className="text-text">{geom.hLead}</strong></div>
                     <div>V: <strong className="text-text">{geom.vLead}</strong></div>
                   </div>
