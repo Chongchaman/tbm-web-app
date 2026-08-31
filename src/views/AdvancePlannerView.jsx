@@ -27,7 +27,11 @@ import {
   Save,
   Lock,
   Unlock,
-  Boxes
+  Boxes,
+  Lightbulb,
+  Activity,
+  Gauge,
+  Zap
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -59,6 +63,7 @@ import {
   SEGMENT_SIZES 
 } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
+import { getAIConfidenceLevel } from '../services/aiCalibrator';
 
 ChartJS.register(
   CategoryScale,
@@ -173,6 +178,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       startVLead: Number(startVLead) || 0,
       maxTolerance: Number(maxTolerance) || 55.0,
       steeringSign,
+      ringLogs, // System 6: Pass ring logs for adaptive calibration
     });
     setPlanResult(res);
     setIsCalculated(true);
@@ -430,6 +436,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       'After Ring V (mm)',
       'DTA Deviation (mm)',
       'Suitability',
+      'Tail Gap Min (mm)',
+      'Gap Left (mm)',
+      'Gap Right (mm)',
+      'Gap Top (mm)',
+      'Gap Bottom (mm)',
+      'Risk Score (0-100)',
+      'Articulation (deg)',
+      'AI Reasoning',
       'Limit Status',
     ];
 
@@ -449,6 +463,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       r.afterV,
       r.deviationMm,
       r.suitability,
+      r.minGap,
+      r.gapL,
+      r.gapR,
+      r.gapT,
+      r.gapB,
+      r.riskIndex,
+      r.articulationDeg,
+      `"${(r.aiReasoning || '').replace(/"/g, '""')}"`,
       r.exceedsLimit ? `EXCEEDED by +${r.overLimitAmount}mm` : 'OK (<=55mm)',
     ]);
 
@@ -576,7 +598,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
             </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-surf-3/80 px-4 py-2.5 rounded-xl border border-white/10 shrink-0 font-mono text-xs">
+          <div className="flex flex-wrap items-center gap-3 bg-surf-3/80 px-4 py-2.5 rounded-xl border border-white/10 shrink-0 font-mono text-xs">
             <div>
               <span className="text-[10px] text-text-muted uppercase block">Max Lead Seen</span>
               <span
@@ -590,8 +612,26 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               </span>
             </div>
             <div className="border-l border-white/10 pl-3">
-              <span className="text-[10px] text-text-muted uppercase block">Max DTA Deviation</span>
+              <span className="text-[10px] text-text-muted uppercase block">Max DTA Dev</span>
               <span className="text-lg font-bold text-cyan-400">{planResult.maxDeviationMm} mm</span>
+            </div>
+            <div className="border-l border-white/10 pl-3">
+              <span className="text-[10px] text-text-muted uppercase block">Avg Risk Index</span>
+              <span
+                className={`text-lg font-bold ${
+                  (planResult.avgRiskIndex || 0) <= 25
+                    ? 'text-emerald-400'
+                    : (planResult.avgRiskIndex || 0) <= 50
+                    ? 'text-amber-400'
+                    : 'text-rose-400'
+                }`}
+              >
+                {planResult.avgRiskIndex || 0}<span className="text-xs text-text-muted">/100</span>
+              </span>
+            </div>
+            <div className="border-l border-white/10 pl-3">
+              <span className="text-[10px] text-text-muted uppercase block">Max Artic Angle</span>
+              <span className="text-lg font-bold text-purple-400">{planResult.maxArticulationDeg || 0}&deg;</span>
             </div>
             <div className="border-l border-white/10 pl-3">
               <span className="text-[10px] text-text-muted uppercase block">Violations (&gt;55mm)</span>
@@ -1140,90 +1180,87 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
             <table className="w-full text-left text-xs border-collapse font-mono">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-white/10 text-text-muted bg-surf-3 shadow-md">
-                  <th className="p-3">Step</th>
-                  <th className="p-3">STA (Chainage)</th>
-                  <th className="p-3">Ring No.</th>
-                  <th className="p-3">Sec</th>
-                  <th className="p-3">Size (m)</th>
-                  <th className="p-3">Prev Key</th>
-                  <th className="p-3">Auto Key</th>
-                  <th className="p-3">Suitability</th>
-                  <th className="p-3">Steering Req.</th>
-                  <th className="p-3">After Ring H</th>
-                  <th className="p-3">After Ring V</th>
-                  <th className="p-3">DTA Dev.</th>
-                  <th className="p-3">Limit Check (&le;55mm)</th>
+                  <th className="p-2.5">Step</th>
+                  <th className="p-2.5">STA</th>
+                  <th className="p-2.5">Ring No.</th>
+                  <th className="p-2.5">Sec</th>
+                  <th className="p-2.5">Key</th>
+                  <th className="p-2.5">Suit.</th>
+                  <th className="p-2.5">After H</th>
+                  <th className="p-2.5">After V</th>
+                  <th className="p-2.5">DTA Dev</th>
+                  <th className="p-2.5">Tail Gap (L/R)</th>
+                  <th className="p-2.5">Risk Score</th>
+                  <th className="p-2.5">💡 AI Reasoning (เหตุผลการตัดสินใจ)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {planResult.plannedRings.map((r) => (
-                  <tr
-                    key={r.step}
-                    className={`hover:bg-white/5 transition-colors ${
-                      r.exceedsLimit ? 'bg-rose-500/10' : ''
-                    }`}
-                  >
-                    <td className="p-3 text-text-muted font-bold">#{r.step}</td>
-                    <td className="p-3 font-bold text-text">{r.sta}</td>
-                    <td className="p-3 font-bold text-acc">{r.ringNum}</td>
-                    <td className="p-3 text-text-muted font-bold">{r.sectionCode}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded font-bold ${
-                          r.size === 1200
-                            ? 'bg-amber-500/20 text-amber-300'
-                            : 'bg-cyan-500/20 text-cyan-300'
-                        }`}
-                      >
-                        {r.sizeM}m ({r.type === 'U' ? 'UN' : r.type === 'R' ? 'RT' : 'LT'})
-                      </span>
-                    </td>
-                    <td className="p-3 text-text-muted">{r.prevKey}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2.5 py-0.5 rounded font-black text-sm shadow-sm ${
-                          r.type === 'R'
-                            ? 'bg-rose-500/20 text-rose-400'
-                            : r.type === 'L'
-                            ? 'bg-cyan-500/20 text-cyan-400'
-                            : 'bg-amber-500/20 text-amber-400'
-                        }`}
-                      >
-                        {r.selectedKey}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <KeySuitabilityBadge suitability={r.suitability} size="sm" />
-                    </td>
-                    <td className="p-3 font-semibold text-fair">
-                      {r.leadReq > 0 ? `+${r.leadReq}` : r.leadReq} mm
-                    </td>
-                    <td
-                      className={`p-3 font-bold ${
-                        r.exceedsLimit ? 'text-rose-400' : 'text-emerald-400'
+                {planResult.plannedRings.map((r) => {
+                  const riskColor = 
+                    r.riskIndex <= 25 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                    r.riskIndex <= 50 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                    r.riskIndex <= 75 ? 'bg-orange-500/15 text-orange-300 border-orange-500/30' :
+                    'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold';
+
+                  return (
+                    <tr
+                      key={r.step}
+                      className={`hover:bg-white/5 transition-colors ${
+                        r.exceedsLimit || r.isGapCrit ? 'bg-rose-500/10' : r.isGapWarn ? 'bg-amber-500/5' : ''
                       }`}
                     >
-                      {r.afterH > 0 ? `+${r.afterH}` : r.afterH} mm
-                    </td>
-                    <td className="p-3 font-semibold text-text">
-                      {r.afterV > 0 ? `+${r.afterV}` : r.afterV} mm
-                    </td>
-                    <td className="p-3 text-cyan-400 font-bold">
-                      {r.deviationMm > 0 ? `+${r.deviationMm}` : r.deviationMm} mm
-                    </td>
-                    <td className="p-3">
-                      {r.exceedsLimit ? (
-                        <span className="flex items-center gap-1 text-rose-400 font-bold text-[11px]">
-                          <XCircle size={13} /> Exceeded by +{r.overLimitAmount}mm
+                      <td className="p-2.5 text-text-muted font-bold">#{r.step}</td>
+                      <td className="p-2.5 font-bold text-text">{r.sta}</td>
+                      <td className="p-2.5 font-bold text-acc">{r.ringNum}</td>
+                      <td className="p-2.5 text-text-muted font-bold">{r.sectionCode}</td>
+                      <td className="p-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded font-black text-xs shadow-sm ${
+                            r.type === 'R'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              : r.type === 'L'
+                              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          }`}
+                        >
+                          {r.selectedKey}
                         </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-emerald-400 text-[11px]">
-                          <Check size={13} /> Pass (&le;{planResult.maxTolerance}mm)
+                        <span className="text-[10px] text-text-muted ml-1">({r.sizeM}m)</span>
+                      </td>
+                      <td className="p-2.5">
+                        <KeySuitabilityBadge suitability={r.suitability} size="sm" />
+                      </td>
+                      <td
+                        className={`p-2.5 font-bold ${
+                          r.exceedsLimit ? 'text-rose-400' : 'text-emerald-400'
+                        }`}
+                      >
+                        {r.afterH > 0 ? `+${r.afterH}` : r.afterH} mm
+                      </td>
+                      <td className="p-2.5 font-semibold text-text">
+                        {r.afterV > 0 ? `+${r.afterV}` : r.afterV} mm
+                      </td>
+                      <td className="p-2.5 text-cyan-400 font-bold">
+                        {r.deviationMm > 0 ? `+${r.deviationMm}` : r.deviationMm} mm
+                      </td>
+                      <td className="p-2.5 font-mono text-[11px]">
+                        <span className={r.gapL < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>L:{r.gapL}</span> /{' '}
+                        <span className={r.gapR < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>R:{r.gapR}</span>
+                      </td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded border text-[11px] font-bold ${riskColor}`}>
+                          {r.riskIndex}<span className="text-[9px] opacity-70">/100</span>
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-2.5 font-sans text-xs text-text-muted max-w-xs truncate" title={r.aiReasoning}>
+                        <div className="flex items-center gap-1 text-slate-300">
+                          <Lightbulb size={12} className="text-amber-400 shrink-0" />
+                          <span className="truncate">{r.aiReasoning || 'ปกติ'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
