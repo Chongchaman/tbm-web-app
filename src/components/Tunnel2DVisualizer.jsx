@@ -48,6 +48,11 @@ export default function Tunnel2DVisualizer({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Line Scale & Tolerance Envelope State
+  const [strokeScale, setStrokeScale] = useState(0.8); // 0.5 (บาง), 0.8 (มาตรฐานคมชัด), 1.2 (หนา), 1.8 (หนาพิเศษ)
+  const [toleranceMm, setToleranceMm] = useState(75); // Construction Tolerance Limit ±75mm
+  const [showToleranceBand, setShowToleranceBand] = useState(true);
+
   // View Filter Toggles
   const [showSegments, setShowSegments] = useState(true);
   const [showDTAEnvelope, setShowDTAEnvelope] = useState(true);
@@ -370,7 +375,7 @@ export default function Tunnel2DVisualizer({
           <button
             type="button"
             onClick={() => setShowSTAMarkers((p) => !p)}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
               showSTAMarkers
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
                 : 'bg-surf-2 text-text-muted border-white/5 opacity-60'
@@ -378,6 +383,69 @@ export default function Tunnel2DVisualizer({
           >
             <span>🚩 หมุด STA</span>
           </button>
+
+          {/* Tolerance Envelope Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowToleranceBand((p) => !p)}
+            className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+              showToleranceBand
+                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400/50 shadow-sm shadow-emerald-500/20'
+                : 'bg-surf-2 text-text-muted border-white/5 opacity-60'
+            }`}
+            title="แสดงแนวเขต Tolerance ยอมรับได้ (±75 mm)"
+          >
+            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>
+            <span>Tolerance (±{toleranceMm}mm)</span>
+          </button>
+        </div>
+
+        {/* Line Thickness Scale & Tolerance Settings Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Stroke Width Scale Preset */}
+          <div className="flex items-center bg-surf-2 px-2 py-1 rounded-xl border border-white/10 gap-1 text-xs">
+            <span className="text-text-muted text-[11px] font-sans font-bold flex items-center gap-1 mr-1">
+              <Sliders size={13} className="text-acc" /> ขนาดเส้น:
+            </span>
+            {[
+              { s: 0.5, label: 'บาง' },
+              { s: 0.8, label: 'ปกติ' },
+              { s: 1.2, label: 'หนา' },
+              { s: 1.8, label: 'หนาพิเศษ' },
+            ].map((st) => (
+              <button
+                key={st.s}
+                type="button"
+                onClick={() => setStrokeScale(st.s)}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-all ${
+                  strokeScale === st.s
+                    ? 'bg-acc text-black shadow-sm'
+                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tolerance Limit Selector */}
+          <div className="flex items-center bg-surf-2 px-2 py-1 rounded-xl border border-white/10 gap-1 text-xs">
+            <span className="text-text-muted text-[11px] font-sans font-bold">Limit:</span>
+            {[50, 75, 100].map((tVal) => (
+              <button
+                key={tVal}
+                type="button"
+                onClick={() => setToleranceMm(tVal)}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-all ${
+                  toleranceMm === tVal
+                    ? 'bg-emerald-400 text-black shadow-sm'
+                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                }`}
+              >
+                &plusmn;{tVal}mm
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Zoom & Canvas Navigation Controls */}
@@ -467,8 +535,9 @@ export default function Tunnel2DVisualizer({
               <span className="text-text-muted">After V Plumb:</span>
               <span className="font-bold text-purple-300">{hoveredRing.afterV} mm</span>
               <span className="text-text-muted">DTA Offset:</span>
-              <span className={`font-bold ${Math.abs(hoveredRing.deviationMm) > 50 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              <span className={`font-bold ${Math.abs(hoveredRing.deviationMm) > toleranceMm ? 'text-rose-400' : 'text-emerald-400'}`}>
                 {hoveredRing.deviationMm > 0 ? `+${hoveredRing.deviationMm}` : hoveredRing.deviationMm} mm
+                {Math.abs(hoveredRing.deviationMm) > toleranceMm && ' ⚠️ เกิน Tolerance!'}
               </span>
             </div>
           </div>
@@ -489,8 +558,12 @@ export default function Tunnel2DVisualizer({
             <span className="text-cyan-300 font-bold">LT (1.4m)</span>
           </div>
           <div className="flex items-center gap-1.5 border-l border-white/20 pl-2">
-            <span className="w-4 h-0.5 bg-purple-400 border-dashed"></span>
-            <span className="text-purple-300 font-bold">DTA Alignment (6.3m Tube)</span>
+            <span className="w-3.5 h-3 rounded-sm bg-emerald-500/30 border border-emerald-400 border-dashed"></span>
+            <span className="text-emerald-300 font-bold">Tolerance Corridor (&plusmn;{toleranceMm}mm)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 h-0.5 bg-amber-400 border-dashed"></span>
+            <span className="text-amber-300 font-bold">DTA Centerline</span>
           </div>
         </div>
 
@@ -519,13 +592,42 @@ export default function Tunnel2DVisualizer({
             transform={`translate(${canvasW / 2 + pan.x}, ${canvasH / 2 + pan.y}) scale(${zoom}) translate(${-canvasW / 2}, ${-canvasH / 2})`}
             style={{ transition: isDragging ? 'none' : 'transform 0.08s ease-out' }}
           >
-            {/* 1. DTA Envelope (Design Tube & Centerline) */}
+            {/* 0. Engineering Tolerance Corridor (±75mm) */}
+            {showToleranceBand && dtaCorridorPaths.tolPolygonPath && (
+              <g className="tolerance-envelope">
+                {/* Tolerance Safe Zone Ribbon Fill */}
+                <path
+                  d={dtaCorridorPaths.tolPolygonPath}
+                  fill="rgba(0, 230, 118, 0.16)"
+                  stroke="none"
+                />
+                {/* Left & Right Tolerance Boundary Lines (±75mm) */}
+                <path
+                  d={dtaCorridorPaths.tolLeftPath}
+                  fill="none"
+                  stroke="#00e676"
+                  strokeWidth={Math.max(0.6, 1.2 * strokeScale)}
+                  strokeDasharray="3,3"
+                  opacity="0.85"
+                />
+                <path
+                  d={dtaCorridorPaths.tolRightPath}
+                  fill="none"
+                  stroke="#00e676"
+                  strokeWidth={Math.max(0.6, 1.2 * strokeScale)}
+                  strokeDasharray="3,3"
+                  opacity="0.85"
+                />
+              </g>
+            )}
+
+            {/* 1. DTA Envelope (Design 6.3m Outer Tube & Centerline) */}
             {showDTAEnvelope && dtaCorridorPaths.polygonPath && (
               <g className="dta-envelope">
-                {/* Translucent Tube Fill */}
+                {/* Translucent Outer Tube Fill */}
                 <path
                   d={dtaCorridorPaths.polygonPath}
-                  fill="rgba(168, 85, 247, 0.08)"
+                  fill="rgba(168, 85, 247, 0.05)"
                   stroke="none"
                 />
 
@@ -534,17 +636,17 @@ export default function Tunnel2DVisualizer({
                   d={dtaCorridorPaths.leftPath}
                   fill="none"
                   stroke="#a855f7"
-                  strokeWidth="1.2"
+                  strokeWidth={Math.max(0.6, 1.0 * strokeScale)}
                   strokeDasharray="4,3"
-                  opacity="0.6"
+                  opacity="0.5"
                 />
                 <path
                   d={dtaCorridorPaths.rightPath}
                   fill="none"
                   stroke="#a855f7"
-                  strokeWidth="1.2"
+                  strokeWidth={Math.max(0.6, 1.0 * strokeScale)}
                   strokeDasharray="4,3"
-                  opacity="0.6"
+                  opacity="0.5"
                 />
 
                 {/* DTA Centerline */}
@@ -552,9 +654,9 @@ export default function Tunnel2DVisualizer({
                   d={dtaCorridorPaths.centerPath}
                   fill="none"
                   stroke="#ffab40"
-                  strokeWidth="2"
+                  strokeWidth={Math.max(0.8, 1.8 * strokeScale)}
                   strokeDasharray="6,4"
-                  opacity="0.85"
+                  opacity="0.9"
                 />
               </g>
             )}
@@ -604,7 +706,7 @@ export default function Tunnel2DVisualizer({
                         points={poly.pointsStr}
                         fill={fillColor}
                         stroke={strokeColor}
-                        strokeWidth={isCurrent ? 2.5 : isHovered ? 2 : 1}
+                        strokeWidth={isCurrent ? Math.max(1.2, 2.2 * strokeScale) : isHovered ? Math.max(1.0, 1.8 * strokeScale) : Math.max(0.5, 0.85 * strokeScale)}
                         filter={isCurrent ? 'url(#glow)' : undefined}
                       />
 
@@ -695,7 +797,7 @@ export default function Tunnel2DVisualizer({
               }, '')}
               fill="none"
               stroke="#00d4ff"
-              strokeWidth="2.5"
+              strokeWidth={Math.max(1.0, 2.0 * strokeScale)}
               pointerEvents="none"
               opacity="0.75"
             />
