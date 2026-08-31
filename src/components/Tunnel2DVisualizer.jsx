@@ -598,7 +598,7 @@ export default function Tunnel2DVisualizer({
                 {/* Tolerance Safe Zone Ribbon Fill */}
                 <path
                   d={dtaCorridorPaths.tolPolygonPath}
-                  fill="rgba(0, 230, 118, 0.16)"
+                  fill="rgba(0, 230, 118, 0.12)"
                   stroke="none"
                 />
                 {/* Left & Right Tolerance Boundary Lines (±75mm) */}
@@ -606,17 +606,19 @@ export default function Tunnel2DVisualizer({
                   d={dtaCorridorPaths.tolLeftPath}
                   fill="none"
                   stroke="#00e676"
-                  strokeWidth={Math.max(0.6, 1.2 * strokeScale)}
-                  strokeDasharray="3,3"
-                  opacity="0.85"
+                  strokeWidth={Math.max(0.75, 1.4 * strokeScale)}
+                  strokeDasharray="4,3"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.9"
                 />
                 <path
                   d={dtaCorridorPaths.tolRightPath}
                   fill="none"
                   stroke="#00e676"
-                  strokeWidth={Math.max(0.6, 1.2 * strokeScale)}
-                  strokeDasharray="3,3"
-                  opacity="0.85"
+                  strokeWidth={Math.max(0.75, 1.4 * strokeScale)}
+                  strokeDasharray="4,3"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.9"
                 />
               </g>
             )}
@@ -627,7 +629,7 @@ export default function Tunnel2DVisualizer({
                 {/* Translucent Outer Tube Fill */}
                 <path
                   d={dtaCorridorPaths.polygonPath}
-                  fill="rgba(168, 85, 247, 0.05)"
+                  fill="rgba(168, 85, 247, 0.04)"
                   stroke="none"
                 />
 
@@ -636,16 +638,18 @@ export default function Tunnel2DVisualizer({
                   d={dtaCorridorPaths.leftPath}
                   fill="none"
                   stroke="#a855f7"
-                  strokeWidth={Math.max(0.6, 1.0 * strokeScale)}
+                  strokeWidth={Math.max(0.6, 1.1 * strokeScale)}
                   strokeDasharray="4,3"
+                  vectorEffect="non-scaling-stroke"
                   opacity="0.5"
                 />
                 <path
                   d={dtaCorridorPaths.rightPath}
                   fill="none"
                   stroke="#a855f7"
-                  strokeWidth={Math.max(0.6, 1.0 * strokeScale)}
+                  strokeWidth={Math.max(0.6, 1.1 * strokeScale)}
                   strokeDasharray="4,3"
+                  vectorEffect="non-scaling-stroke"
                   opacity="0.5"
                 />
 
@@ -654,9 +658,10 @@ export default function Tunnel2DVisualizer({
                   d={dtaCorridorPaths.centerPath}
                   fill="none"
                   stroke="#ffab40"
-                  strokeWidth={Math.max(0.8, 1.8 * strokeScale)}
+                  strokeWidth={Math.max(1.0, 2.0 * strokeScale)}
                   strokeDasharray="6,4"
-                  opacity="0.9"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.95"
                 />
               </g>
             )}
@@ -706,7 +711,8 @@ export default function Tunnel2DVisualizer({
                         points={poly.pointsStr}
                         fill={fillColor}
                         stroke={strokeColor}
-                        strokeWidth={isCurrent ? Math.max(1.2, 2.2 * strokeScale) : isHovered ? Math.max(1.0, 1.8 * strokeScale) : Math.max(0.5, 0.85 * strokeScale)}
+                        strokeWidth={isCurrent ? Math.max(1.5, 2.4 * strokeScale) : isHovered ? Math.max(1.2, 1.8 * strokeScale) : Math.max(0.6, 1.0 * strokeScale)}
+                        vectorEffect="non-scaling-stroke"
                         filter={isCurrent ? 'url(#glow)' : undefined}
                       />
 
@@ -717,51 +723,66 @@ export default function Tunnel2DVisualizer({
                         x2={poly.pFR.x}
                         y2={poly.pFR.y}
                         stroke="#ffffff"
-                        strokeWidth={isCurrent ? 2 : 0.75}
-                        opacity={isCurrent ? 1 : 0.6}
+                        strokeWidth={isCurrent ? Math.max(1.2, 1.8 * strokeScale) : Math.max(0.5, 0.8 * strokeScale)}
+                        vectorEffect="non-scaling-stroke"
+                        opacity={isCurrent ? 1 : 0.65}
                       />
 
                       {/* Ring Center Dot */}
                       <circle
                         cx={poly.pCenter.x}
                         cy={poly.pCenter.y}
-                        r={isCurrent ? 4 : 1.5}
+                        r={isCurrent ? 3.5 / zoom : 1.5 / zoom}
                         fill={isCurrent ? '#00e676' : strokeColor}
                       />
 
-                      {/* Ring Labels (Number & Key) */}
-                      {showLabels && (
-                        <g
-                          transform={`translate(${poly.pCenter.x}, ${poly.pCenter.y}) rotate(${-poly.angleDeg})`}
-                          pointerEvents="none"
-                        >
-                          <text
-                            x="0"
-                            y={zoom > 1.8 ? -4 : 3}
-                            fill={textColor}
-                            fontSize={Math.max(7, Math.min(13, 9 * Math.sqrt(zoom)))}
-                            fontFamily="JetBrains Mono, monospace"
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {zoom > 1.4 ? `${r.ringNum}` : `#${r.step}`}
-                          </text>
+                      {/* Ring Labels with Anti-Scale & Level of Detail (LOD) */}
+                      {showLabels && (() => {
+                        // LOD Filter: show label only if appropriate for zoom level to avoid overlap
+                        const shouldShow = 
+                          isCurrent || isHovered ||
+                          zoom >= 3.0 ||
+                          (zoom >= 1.6 && idx % 2 === 0) ||
+                          (zoom >= 0.8 && idx % 5 === 0) ||
+                          (idx % 10 === 0);
 
-                          {zoom > 1.8 && (
+                        if (!shouldShow) return null;
+
+                        return (
+                          <g
+                            transform={`translate(${poly.pCenter.x}, ${poly.pCenter.y}) scale(${1 / zoom})`}
+                            pointerEvents="none"
+                          >
                             <text
                               x="0"
-                              y="7"
-                              fill="#ffffff"
-                              fontSize={Math.max(6, Math.min(11, 7.5 * Math.sqrt(zoom)))}
+                              y={zoom >= 2.5 ? -3 : 3}
+                              fill={textColor}
+                              fontSize="10"
                               fontFamily="JetBrains Mono, monospace"
+                              fontWeight="bold"
                               textAnchor="middle"
-                              opacity="0.9"
+                              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
                             >
-                              {r.selectedKey} ({r.sizeM}m)
+                              {zoom >= 1.5 ? `${r.ringNum}` : `#${r.step}`}
                             </text>
-                          )}
-                        </g>
-                      )}
+
+                            {zoom >= 2.5 && (
+                              <text
+                                x="0"
+                                y="8"
+                                fill="#ffffff"
+                                fontSize="8"
+                                fontFamily="JetBrains Mono, monospace"
+                                textAnchor="middle"
+                                opacity="0.95"
+                                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
+                              >
+                                {r.selectedKey}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })()}
 
                       {/* Deviation connecting line from Ring Center to DTA Center */}
                       {showDeviations && (zoom > 1.2 || isCurrent || isHovered) && (
@@ -772,14 +793,15 @@ export default function Tunnel2DVisualizer({
                             x2={poly.dtaPt.x}
                             y2={poly.dtaPt.y}
                             stroke={
-                              Math.abs(r.deviationMm) > 50
+                              Math.abs(r.deviationMm) > toleranceMm
                                 ? '#f43f5e'
-                                : Math.abs(r.deviationMm) > 25
+                                : Math.abs(r.deviationMm) > (toleranceMm * 0.6)
                                 ? '#fbbf24'
                                 : '#00d4ff'
                             }
-                            strokeWidth={isCurrent ? 2 : 1}
-                            strokeDasharray="2,2"
+                            strokeWidth={isCurrent ? 1.8 * strokeScale : 1.0 * strokeScale}
+                            vectorEffect="non-scaling-stroke"
+                            strokeDasharray="3,2"
                           />
                         </g>
                       )}
@@ -797,40 +819,50 @@ export default function Tunnel2DVisualizer({
               }, '')}
               fill="none"
               stroke="#00d4ff"
-              strokeWidth={Math.max(1.0, 2.0 * strokeScale)}
+              strokeWidth={Math.max(1.2, 2.2 * strokeScale)}
+              vectorEffect="non-scaling-stroke"
               pointerEvents="none"
               opacity="0.75"
             />
 
-            {/* 4. STA Milestones & Section Boundaries */}
+            {/* 4. STA Milestones & Section Boundaries with Anti-Scale */}
             {showSTAMarkers && (
               <g className="sta-markers" pointerEvents="none">
                 {rings.map((r, i) => {
-                  const isMilestone = i === 0 || i === rings.length - 1 || i % 10 === 0;
+                  // Milestone LOD based on zoom
+                  const stepInterval = zoom < 1.2 ? 40 : zoom < 2.5 ? 20 : 10;
+                  const isMilestone = i === 0 || i === rings.length - 1 || (i > 0 && i % stepInterval === 0);
                   if (!isMilestone) return null;
 
                   const pt = project(r.dtaX, r.dtaY);
                   return (
-                    <g key={`sta-${r.step}`} transform={`translate(${pt.x}, ${pt.y})`}>
-                      <circle r="3" fill="#ffab40" />
-                      <line x1="-12" y1="0" x2="12" y2="0" stroke="#ffab40" strokeWidth="1" />
-                      <text
-                        x="15"
-                        y="3"
-                        fill="#ffab40"
-                        fontSize="9"
-                        fontFamily="JetBrains Mono, monospace"
-                        fontWeight="bold"
-                      >
-                        {r.sta}
-                      </text>
+                    <g key={`sta-${r.step}`} transform={`translate(${pt.x}, ${pt.y}) scale(${1 / zoom})`}>
+                      {/* Fixed Size Milestone Dot */}
+                      <circle r="3.5" fill="#ffab40" stroke="#000" strokeWidth="1" />
+                      <line x1="-10" y1="0" x2="10" y2="0" stroke="#ffab40" strokeWidth="1.2" />
+
+                      {/* Small Crisp Badge for STA Text */}
+                      <g transform="translate(14, -8)">
+                        <rect x="0" y="0" width="82" height="16" rx="4" fill="rgba(10, 14, 23, 0.9)" stroke="rgba(255, 171, 64, 0.5)" strokeWidth="1" />
+                        <text
+                          x="41"
+                          y="11.5"
+                          fill="#ffab40"
+                          fontSize="9"
+                          fontFamily="JetBrains Mono, monospace"
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {r.sta}
+                        </text>
+                      </g>
                     </g>
                   );
                 })}
               </g>
             )}
 
-            {/* 5. Active TBM Cutterhead / Shield Indicator */}
+            {/* 5. Active TBM Cutterhead / Shield Indicator with Anti-Scale */}
             {currentRing && typeof currentRing.tbmX === 'number' && (
               (() => {
                 const headPt = project(currentRing.tbmX, currentRing.tbmY);
@@ -840,30 +872,32 @@ export default function Tunnel2DVisualizer({
                 const headAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
 
                 return (
-                  <g transform={`translate(${headPt.x}, ${headPt.y})`} pointerEvents="none">
-                    {/* Animated Radar Pulse */}
-                    <circle r="18" fill="rgba(0, 230, 118, 0.2)" className="animate-ping" />
-                    <circle r="9" fill="#00e676" stroke="#ffffff" strokeWidth="2" filter="url(#glow)" />
+                  <g transform={`translate(${headPt.x}, ${headPt.y}) scale(${1 / zoom})`} pointerEvents="none">
+                    {/* Animated Radar Pulse (fixed screen size) */}
+                    <circle r="16" fill="rgba(0, 230, 118, 0.25)" className="animate-ping" />
+                    <circle r="8" fill="#00e676" stroke="#ffffff" strokeWidth="2" filter="url(#glow)" />
 
                     {/* Forward Shield Cone */}
                     <g transform={`rotate(${headAngle})`}>
-                      <polygon points="0,-7 14,0 0,7" fill="#00e676" opacity="0.9" />
+                      <polygon points="0,-6 12,0 0,6" fill="#00e676" opacity="0.9" />
                       {/* Laser Alignment Beam */}
-                      <line x1="14" y1="0" x2="60" y2="0" stroke="#00e676" strokeWidth="1.5" strokeDasharray="3,2" opacity="0.8" />
+                      <line x1="12" y1="0" x2="45" y2="0" stroke="#00e676" strokeWidth="1.5" strokeDasharray="3,2" opacity="0.85" />
                     </g>
 
-                    {/* HUD Label */}
-                    <rect x="16" y="-22" width="130" height="20" rx="5" fill="rgba(0, 0, 0, 0.85)" stroke="#00e676" strokeWidth="1" />
-                    <text
-                      x="22"
-                      y="-8"
-                      fill="#00e676"
-                      fontSize="10"
-                      fontFamily="JetBrains Mono, monospace"
-                      fontWeight="bold"
-                    >
-                      TBM #{currentRing.step} ({currentRing.ringNum})
-                    </text>
+                    {/* HUD Label Badge (fixed screen size) */}
+                    <g transform="translate(14, -12)">
+                      <rect x="0" y="0" width="135" height="24" rx="6" fill="rgba(6, 10, 18, 0.92)" stroke="#00e676" strokeWidth="1.5" />
+                      <text
+                        x="10"
+                        y="16"
+                        fill="#00e676"
+                        fontSize="11"
+                        fontFamily="JetBrains Mono, monospace"
+                        fontWeight="bold"
+                      >
+                        TBM #{currentRing.step} ({currentRing.ringNum})
+                      </text>
+                    </g>
                   </g>
                 );
               })()
