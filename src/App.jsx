@@ -51,7 +51,15 @@ export default function App() {
     }
   });
 
-  // Apply Font Size to Root
+  const [fontFamily, setFontFamily] = useState(() => {
+    try {
+      return localStorage.getItem('tbm_font_family') || 'prompt';
+    } catch {
+      return 'prompt';
+    }
+  });
+
+  // Apply Font Size & Family to Root
   useEffect(() => {
     try {
       document.documentElement.setAttribute('data-font-size', fontSize);
@@ -60,6 +68,15 @@ export default function App() {
       console.error(e);
     }
   }, [fontSize]);
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-font-family', fontFamily);
+      localStorage.setItem('tbm_font_family', fontFamily);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [fontFamily]);
 
   const [ringLogs, setRingLogs] = useState(() => {
     try {
@@ -276,31 +293,49 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Font Size Adjuster Control */}
-              <div className="flex items-center bg-surf-3/90 border border-white/10 rounded-xl p-1 gap-1 font-mono text-xs shadow-sm">
-                <span className="text-text-muted px-1.5 flex items-center gap-1 font-sans text-xs hidden md:flex font-semibold">
-                  <Type size={14} className="text-acc" /> ขนาดฟอนต์:
-                </span>
-                {[
-                  { id: 'sm', label: 'A-', title: 'กะทัดรัด (14px)' },
-                  { id: 'md', label: 'A', title: 'มาตรฐาน (16px)' },
-                  { id: 'lg', label: 'A+', title: 'ใหญ่ สบายตา (18px)' },
-                  { id: 'xl', label: 'A++', title: 'ใหญ่พิเศษ (20px)' },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setFontSize(f.id)}
-                    title={f.title}
-                    className={`px-2 py-1 rounded-lg font-bold transition-all text-xs ${
-                      fontSize === f.id
-                        ? 'bg-acc text-black shadow-md shadow-cyan-400/30'
-                        : 'text-text-muted hover:text-white hover:bg-white/5'
-                    }`}
+              {/* Font Family & Size Adjuster Control */}
+              <div className="flex items-center gap-2">
+                {/* Font Family Dropdown */}
+                <div className="hidden sm:flex items-center bg-surf-3/90 border border-white/10 rounded-xl px-2.5 py-1 gap-1.5 shadow-sm">
+                  <Type size={14} className="text-acc shrink-0" />
+                  <select
+                    value={fontFamily}
+                    onChange={(e) => setFontFamily(e.target.value)}
+                    className="bg-transparent text-text text-xs font-semibold outline-none cursor-pointer pr-1"
+                    title="เลือกแบบฟอนต์ (Font Family)"
                   >
-                    {f.label}
-                  </button>
-                ))}
+                    <option value="prompt">ฟอนต์: Prompt (โมเดิร์น วิศวกรรม)</option>
+                    <option value="sarabun">ฟอนต์: Sarabun (มาตรฐาน มีหัว สบายตา)</option>
+                    <option value="noto">ฟอนต์: Noto Sans (สากล มินิมอล)</option>
+                    <option value="kanit">ฟอนต์: Kanit (เข้ม อุตสาหกรรม)</option>
+                    <option value="chakra">ฟอนต์: Chakra Petch (ไฮเทค เครื่องจักร)</option>
+                    <option value="mitr">ฟอนต์: Mitr (กลมมน สบายตา)</option>
+                  </select>
+                </div>
+
+                {/* Font Size Buttons */}
+                <div className="flex items-center bg-surf-3/90 border border-white/10 rounded-xl p-1 gap-1 font-mono text-xs shadow-sm">
+                  {[
+                    { id: 'sm', label: 'A-', title: 'กะทัดรัด (14px)' },
+                    { id: 'md', label: 'A', title: 'มาตรฐาน (16px)' },
+                    { id: 'lg', label: 'A+', title: 'ใหญ่ สบายตา (18px)' },
+                    { id: 'xl', label: 'A++', title: 'ใหญ่พิเศษ (20px)' },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFontSize(f.id)}
+                      title={f.title}
+                      className={`px-2 py-1 rounded-lg font-bold transition-all text-xs ${
+                        fontSize === f.id
+                          ? 'bg-acc text-black shadow-md shadow-cyan-400/30'
+                          : 'text-text-muted hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Cloud Realtime Status Pill Button */}
