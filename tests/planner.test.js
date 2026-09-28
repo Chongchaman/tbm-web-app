@@ -8,6 +8,7 @@ import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFA
 import { calibrateFromRingLogs } from '../src/services/aiCalibrator.js';
 import { calculateFoamConsumption, calculatePolymerConsumption, calculateCurveOffset, calculateCandidates } from '../src/services/calculator.js';
 import { formatRingToDbRow, formatDbRowToRing } from '../src/services/supabaseService.js';
+import { DEFAULT_RECOVERY, recoveryTarget, createRoute, initialRecoveryState, propagateRecovery, endpointAssessment, radians } from '../src/services/alignmentRecovery.js';
 
 const normal = {hLead:0,vLead:0,gapT:50,gapB:50,gapL:50,gapR:50,suitability:'Yes'};
 const section = { ...DEFAULT_ALIGNMENT_SECTIONS[0], code:'TEST', startSTA:'00+000.000', endSTA:'00+015.000', ratio:{un:1,rt:1,lt:1}, allowedTypes:['U','R','L'] };
@@ -86,8 +87,111 @@ test('both alignment strategies display the same DTA propagation they score and 
   const plan=runAdvancePlan({sections:[{...section,sectionType}],verticalAlignment:[],strategy,gapSettings:DEFAULT_GAP_SETTINGS});
   assert.ok(plan.totalRings>0);let previous='U4';
   for(const ring of plan.plannedRings){assert.ok(NEXT_RING_TABLE[previous].includes(ring.selectedKey));assert.equal(ring.deviationMm,ring.predictedDeviationMm);assert.ok(Number.isFinite(ring.deviationMm));previous=ring.selectedKey;}
-  assert.equal(plan.verdict.status,plan.summary.level==='critical'?'INFEASIBLE':plan.summary.level==='warning'?'WARNING':'OPTIMAL');
+  if(plan.summary.level==='critical'||plan.endpoint.level==='critical')assert.equal(plan.verdict.status,'INFEASIBLE');
+  else assert.equal(plan.verdict.status,'UNKNOWN');
   assert.equal(plan.ratioDiagnostics.length,1);
+ }
+});
+
+const straightSection={...section,code:'STRAIGHT',sectionType:'tangent',direction:'straight',radius:0,startSTA:'00+000.000',endSTA:'00+050.000'};
+const flatVertical={code:'FLAT',curveType:'constant_grade',startSTA:'00+000.000',endSTA:'00+050.000',startElev:0,endElev:0,gradePct:0,radiusV:0};
+
+test('recovery reference preserves measured initial pose and ends at zero position and tangent',()=>{
+ for(const offset of [-80,0,80])for(const angle of [-.1,0,.1]) {
+  const begin=recoveryTarget(0,20,offset,radians(angle)),end=recoveryTarget(20,20,offset,radians(angle));
+  assert.equal(begin.offsetMm,offset);assert.ok(Math.abs(begin.headingRad-radians(angle))<1e-10);
+  assert.deepEqual(end,{offsetMm:0,headingRad:0});assert.deepEqual(recoveryTarget(30,20,offset,radians(angle)),end);
+  assert.ok(Math.abs(recoveryTarget(19.999,20,offset,radians(angle)).headingRad)<1e-7);
+ }
+});
+
+test('parallel offset remains offset while an outward heading accumulates geometric drift on both axes',()=>{
+ const route=createRoute([{...straightSection,endSTA:'00+100.000'}],[{...flatVertical,endSTA:'00+100.000'}]);
+ const config={...DEFAULT_RECOVERY,startDeviationH:50,startDeviationV:-30,startHeadingErrorDeg:.1,startPitchErrorDeg:-.1};
+ const begin=initialRecoveryState(route,config);
+ const result=propagateRecovery(begin,route,100,0,0);
+ assert.ok(Math.abs(result.deviationH-(50+100*Math.sin(radians(.1))*1000))<1e-7);
+ assert.ok(Math.abs(result.deviationV-(-30-100*Math.tan(radians(.1))*1000))<1e-7);
+ const parallel=propagateRecovery(initialRecoveryState(route,{...config,startHeadingErrorDeg:0,startPitchErrorDeg:0}),route,100,0,0);
+ assert.ok(Math.abs(parallel.deviationH-50)<1e-7);assert.ok(Math.abs(parallel.deviationV+30)<1e-7);
+});
+
+test('endpoint checks direction even with zero offset and never certify an assumed or incomplete baseline',()=>{
+ const config={...DEFAULT_RECOVERY,initialStateConfirmed:true};
+ const pose={deviationH:0,deviationV:0,headingError:radians(.2),pitchError:0};
+ let check=endpointAssessment(pose,config);
+ assert.equal(check.positionPass,true);assert.equal(check.headingPass,false);assert.equal(check.passed,false);
+ pose.headingError=0;pose.deviationV=-76;assert.equal(endpointAssessment(pose,config).positionPass,false);
+ pose.deviationV=0;assert.equal(endpointAssessment(pose,config).passed,true);
+ pose.longitudinalDeviation=76;assert.equal(endpointAssessment(pose,config).positionPass,false);pose.longitudinalDeviation=0;
+ assert.equal(endpointAssessment(pose,{...config,initialStateConfirmed:false}).passed,false);
+ assert.equal(endpointAssessment(pose,config,false).known,false);
+});
+
+test('both strategies recover positive and negative offsets without silently ignoring yaw or pitch',()=>{
+ for(const strategy of ['senior_ai','ratio_guided'])for(const sign of [-1,1]){
+  const plan=runAdvancePlan({sections:[straightSection],verticalAlignment:[flatVertical],strategy,startHLead:0,startVLead:0,
+   recovery:{startDeviationH:50*sign,startDeviationV:30,startHeadingErrorDeg:.1,initialStateConfirmed:true}});
+  assert.equal(plan.plannedRings[0].startX,.05*sign);
+  assert.ok(Math.abs(plan.endpoint.deviationH)<20);assert.ok(Math.abs(plan.endpoint.deviationV)<30);
+  assert.equal(plan.endpoint.passed,plan.endpoint.positionPass&&plan.endpoint.headingPass);
+  if(!plan.endpoint.headingPass)assert.equal(plan.verdict.status,'INFEASIBLE');
+  if(sign===1)assert.equal(plan.endpoint.headingPass,true);
+  assert.equal(plan.plannedRings.at(-1).endSTA,'00+050.000');
+  assert.equal(plan.endpoint.deviationH,plan.plannedRings.at(-1).deviationMm);
+  if(plan.summary.level==='critical')assert.equal(plan.verdict.status,'INFEASIBLE'); // endpoint success does not hide ring risks
+ }
+});
+
+test('planning starts at measured STA in either direction, preserves transition progress and samples exact endpoint inside last ring',()=>{
+ for(const sign of [-1,1]){
+  const sec={...straightSection,startSTA:sign===1?'00+000.000':'00+050.000',endSTA:sign===1?'00+050.000':'00+000.000'};
+  const vert={...flatVertical,startSTA:sec.startSTA,endSTA:sec.endSTA};
+  const plan=runAdvancePlan({sections:[sec],verticalAlignment:[vert],startSTA:'00+025.250'});
+  assert.equal(plan.plannedRings[0].sta,'00+025.250');assert.equal(plan.plannedRings.at(-1).endSTA,sec.endSTA);
+  assert.ok(Math.abs(plan.plannedRings.reduce((s,r)=>s+r.simulatedLengthM,0)-plan.recovery.totalDistanceM)<.001);
+  assert.ok(plan.recovery.finalRingBeyondEndpointM>=0 && plan.recovery.finalRingBeyondEndpointM<1.4);
+ }
+ const transition={...straightSection,sectionType:'transition_in',direction:'right',radius:100};
+ const route=createRoute([transition],[flatVertical],'00+025.000');
+ assert.ok(Math.abs(route.curvature(0)-.005)<1e-12);
+});
+
+test('short or constrained plans expose unreachable endpoint rather than claiming recovery',()=>{
+ const sec={...straightSection,endSTA:'00+001.000'};
+ const plan=runAdvancePlan({sections:[sec],verticalAlignment:[{...flatVertical,endSTA:sec.endSTA}],
+   recovery:{startDeviationH:500,startDeviationV:-500,recoveryDistanceM:20,initialStateConfirmed:true}});
+ assert.equal(plan.recovery.effectiveDistanceM,1);assert.equal(plan.endpoint.positionPass,false);
+ assert.equal(plan.verdict.status,'INFEASIBLE');assert.equal(plan.endpoint.passed,false);
+ const absent=runAdvancePlan({sections:[straightSection],verticalAlignment:[],recovery:{initialStateConfirmed:true}});
+ assert.equal(absent.recovery.verticalKnown,false);assert.equal(absent.endpoint.known,false);
+});
+
+test('invalid recovery numbers and out-of-range current STA are rejected',()=>{
+ const input={sections:[straightSection],verticalAlignment:[flatVertical]};
+ for(const recovery of [{startDeviationH:''},{startDeviationV:NaN},{startHeadingErrorDeg:11},{startPitchErrorDeg:null},
+  {recoveryDistanceM:0},{endpointToleranceMm:-1},{endpointHeadingToleranceDeg:0},{maxTaperTurnDeg:0},{responseDiameterMm:0}])assert.throws(()=>runAdvancePlan({...input,recovery}));
+ for(const startSTA of ['bad','00+051.000','00+050.000'])assert.throws(()=>runAdvancePlan({...input,startSTA}));
+});
+
+test('vertical reference honors actual endpoint elevations and curvature rather than inventing zero elevation',()=>{
+ const route=createRoute([straightSection],[{...flatVertical,curveType:'sag_curve',radiusV:2500,startElev:10,endElev:11}]);
+ assert.equal(route.verticalAt(0).elevation,10);assert.equal(route.verticalAt(50).elevation,11);
+ assert.ok(Math.abs(route.verticalAt(25).elevation-10.375)<1e-10);
+ const begin=initialRecoveryState(route,{...DEFAULT_RECOVERY,startDeviationV:40});
+ assert.ok(Math.abs(begin.tbmZ-10.04)<1e-10);
+ assert.ok(Math.abs(begin.pitchError)<1e-10);
+ assert.equal(assessRing({...normal,deviationMm:0,deviationVMm:80}).level,'critical');
+});
+
+test('a ring crossing an alignment boundary respects allowed segment types in both spans',()=>{
+ const first={...straightSection,code:'ONE',endSTA:'00+005.250',allowedTypes:['R','L'],ratio:{un:0,rt:1,lt:1}};
+ const second={...straightSection,code:'TWO',startSTA:first.endSTA,endSTA:'00+012.000',allowedTypes:['U','R'],ratio:{un:1,rt:1,lt:0}};
+ for(const strategy of ['senior_ai','ratio_guided']) {
+  const plan=runAdvancePlan({sections:[first,second],verticalAlignment:[{...flatVertical,endSTA:second.endSTA}],strategy});
+  const crossing=plan.plannedRings.find(r=>r.dist<5.25 && r.dist+r.simulatedLengthM>5.25);
+  assert.ok(crossing);assert.equal(crossing.type,'R');
+  assert.equal(plan.plannedRings.at(-1).endSTA,'00+012.000');
  }
 });
 

@@ -132,6 +132,12 @@ export default function Tunnel2DVisualizer({
     return { x: isNaN(svgX) ? 0 : svgX, y: isNaN(svgY) ? 0 : svgY, scale };
   }, [bounds, canvasW, canvasH]);
 
+  const recoveryPath = useMemo(() => {
+    if (!rings.length || !planResult.recovery) return '';
+    const start=project(Number(planResult.recovery.startDeviationH)/1000,0);
+    return `M ${start.x},${start.y} `+rings.map(r=>{const p=project(r.targetX,r.targetY);return `L ${p.x},${p.y}`;}).join(' ');
+  }, [rings, planResult.recovery, project]);
+
   // 2. Precompute Polygons for Segments and DTA Corridor
   const segmentPolygons = useMemo(() => {
     return rings.map((r, i) => {
@@ -545,6 +551,7 @@ export default function Tunnel2DVisualizer({
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-0.5 bg-amber-400 border-dashed"></span>
             <span className="text-amber-300 font-bold">DTA Centerline</span>
+            {recoveryPath && <span className="text-emerald-300 font-bold">เส้นประเขียว: แนวแก้เป้าหมาย H</span>}
           </div>
         </div>
 
@@ -605,6 +612,7 @@ export default function Tunnel2DVisualizer({
             )}
 
             {/* 1. DTA Envelope (Design 6.3m Outer Tube & Centerline) */}
+            {recoveryPath && <path d={recoveryPath} fill="none" stroke="#34d399" strokeWidth="2" strokeDasharray="9,5" vectorEffect="non-scaling-stroke"/>}
             {showDTAEnvelope && dtaCorridorPaths.polygonPath && (
               <g className="dta-envelope">
                 {/* Translucent Outer Tube Fill */}

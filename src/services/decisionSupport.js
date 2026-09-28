@@ -53,7 +53,9 @@ export function assessRing(ring, limits = DEFAULT_LIMITS) {
   else if (gapKnown && minGap <= limits.gapCritical) issues.push({ level: 'critical', code: 'gap', message: `Gap ต่ำสุด ${round(minGap, 1)} mm ≤ ${limits.gapCritical} mm` });
   else if (gapKnown && minGap <= limits.gapWarning) issues.push({ level: 'warning', code: 'gap', message: `Gap ต่ำสุด ${round(minGap, 1)} mm ≤ ${limits.gapWarning} mm` });
   if (!gapKnown) issues.push({ level: 'unknown', code: 'gap-missing', message: 'ยังไม่มีค่า Gap ครบ 4 ด้าน' });
-  if (deviationKnown && Math.abs(Number(ring.deviationMm)) > limits.deviation) issues.push({ level: 'critical', code: 'dta', message: `DTA ${round(ring.deviationMm, 1)} mm อยู่นอก ±${limits.deviation} mm` });
+  if (deviationKnown && Math.abs(Number(ring.deviationMm)) > limits.deviation) issues.push({ level: 'critical', code: 'dta', message: `DTA H ${round(ring.deviationMm, 1)} mm อยู่นอก ±${limits.deviation} mm` });
+  if (finite(ring.deviationVMm) && Math.abs(Number(ring.deviationVMm)) > limits.deviation) issues.push({ level: 'critical', code: 'dta', message: `DTA V ${round(ring.deviationVMm, 1)} mm อยู่นอก ±${limits.deviation} mm` });
+  if (ring.articulationExceeded) issues.push({ level: 'critical', code: 'articulation', message: 'มุม Taper ต่อริงเกินเพดานที่ตั้งในแบบจำลอง' });
   if (ring.suitability === 'No') issues.push({ level: 'critical', code: 'suitability', message: 'คีย์ไม่ผ่าน Suitability Matrix' });
   else if (ring.suitability === 'Fair') issues.push({ level: 'warning', code: 'suitability', message: 'คีย์เข้ากันได้ระดับ Fair: ต้องตรวจทาน' });
   const level = issues.some(i => i.level === 'critical') ? 'critical' : issues.some(i => i.level === 'warning') ? 'warning' : issues.some(i => i.level === 'unknown') ? 'unknown' : 'normal';
@@ -64,7 +66,7 @@ export function summarizeRings(rings = [], limits = DEFAULT_LIMITS) {
   const assessed = rings.map(ring => ({ ring, ...assessRing(ring, limits) }));
   const leadValues = assessed.map(r => r.leadMax).filter(v => v !== null);
   const gaps = assessed.map(r => r.minGap).filter(v => v !== null);
-  const deviations = rings.map(r => r.deviationMm).filter(finite).map(Number);
+  const deviations = rings.flatMap(r => [r.deviationMm, r.deviationVMm]).filter(finite).map(Number);
   const critical = assessed.filter(r => r.level === 'critical');
   const warnings = assessed.filter(r => r.level === 'warning');
   const unknown = assessed.filter(r => r.level === 'unknown');

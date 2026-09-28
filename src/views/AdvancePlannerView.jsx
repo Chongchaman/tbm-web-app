@@ -1,5 +1,7 @@
 import { PageHeader, PlanInsight, StatCard, Field, ValidationErrors, InsightPanel } from '../components/PlannerUI';
 import LeadChart from '../components/LeadChart';
+import RecoveryChart from '../components/RecoveryChart';
+import { DEFAULT_RECOVERY } from '../services/alignmentRecovery';
 import { latestMeasured, nextRingNumber, ringNumber, summarizeRings, getLimits, assessRing, exportCSV, validateAlignment, validatePlanningInput } from '../services/decisionSupport';
 import { useState } from 'react';
 import { Sparkles, Layers, Sliders, TrendingUp, CheckCircle2, Download, Plus, Trash2, SlidersHorizontal, RotateCcw, Eye, Save, Lock, Lightbulb } from 'lucide-react';
@@ -66,6 +68,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'U4');
   const [startHLead, setStartHLead] = useState(lastRing ? lastRing.hLead : 0);
   const [startVLead, setStartVLead] = useState(lastRing ? lastRing.vLead : 0);
+  const [currentSTA, setCurrentSTA] = useState(sections[0]?.startSTA || '');
+  const [recovery, setRecovery] = useState({...DEFAULT_RECOVERY});
   const [maxTolerance, setMaxTolerance] = useState(55.0);
   const [steeringSign, setSteeringSign] = useState('steering_bias'); // 'steering_bias' (Right = -)
   const [activeSubTab, setActiveSubTab] = useState('2d_map'); // '2d_map' | 'trajectory_chart' | 'table'
@@ -84,7 +88,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   // Plan Calculation State (Safe initialization)
   const [planResult, setPlanResult] = useState(() => {
     try {
-      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startRingNumber: ringNumber({ ringNum: nextRingNumber(ringLogs) }) });
+      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ ringNum: nextRingNumber(ringLogs) }) });
     } catch (e) {
       console.error('Initial plan error:', e);
       return {
@@ -105,7 +109,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     const errors = [...validatePlanningInput({ startKey, startHLead, startVLead, maxTolerance }), ...validateAlignment(sections, vProfile)];
     if (errors.length) { setInputErrors(errors); setNeedsRecalc(true); return; }
     try {
-      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startRingNumber: ringNumber({ringNum:nextRingNumber(ringLogs)}) });
+      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ringNum:nextRingNumber(ringLogs)}) });
       setPlanResult(res); setIsCalculated(true); setNeedsRecalc(false); setScrubStep(1); setInputErrors([]);
     } catch (error) { setInputErrors([error.message]); setNeedsRecalc(true); }
   };
@@ -252,7 +256,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       'Steering Lead Req (mm)',
       'After Ring H (mm)',
       'After Ring V (mm)',
-      'DTA Deviation (mm)',
+      'DTA H Deviation (mm)', 'DTA V Deviation (mm)', 'Along Alignment Endpoint Lag (mm)', 'Heading Error (deg)', 'Pitch Error (deg)',
+      'Recovery Target H (mm)', 'Recovery Target V (mm)', 'End STA', 'Simulated Distance within Ring (m)', 'Initial Pose Source',
       'Suitability',
       'Tail Gap Min (mm)',
       'Gap Left (mm)',
@@ -260,9 +265,9 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       'Gap Top (mm)',
       'Gap Bottom (mm)',
       'Risk Score (0-100)',
-      'Articulation (deg)',
+      'Estimated Taper Turn (deg)',
       'AI Reasoning',
-      'Limit Status',
+      'Lead Limit Status', 'Endpoint Assessment', 'Overall Plan Verdict',
     ];
 
     const rows = planResult.plannedRings.map((r) => [
@@ -280,6 +285,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       r.afterH,
       r.afterV,
       r.deviationMm,
+      r.deviationVMm, r.longitudinalDeviationMm, r.headingErrorDeg, r.pitchErrorDeg, r.targetDeviationH, r.targetDeviationV, r.endSTA, r.simulatedLengthM,
+      planResult.recovery?.initialStateConfirmed ? 'Survey/Navigation entered by user' : 'Assumed/example pose',
       r.suitability,
       r.minGap,
       r.gapL,
@@ -290,6 +297,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       r.articulationDeg,
       r.aiReasoning || '',
       r.exceedsLimit ? `EXCEEDED by +${r.overLimitAmount}mm` : `OK (<=${planResult.maxTolerance}mm)`,
+      planResult.endpoint ? `Position:${planResult.endpoint.positionPass} Heading:${planResult.endpoint.headingPass} InitialPoseKnown:${planResult.endpoint.known}` : 'Unknown',
+      planResult.verdict.status,
     ]);
 
     exportCSV('tbm-advance-plan.csv', headers, rows);
@@ -316,6 +325,32 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         </div>
       )}
 
+      <section className="card stack" aria-label="ข้อมูลตั้งต้นและการกลับเข้าแนว">
+        <div><h3>ตำแหน่งหัวเจาะปัจจุบันและแผนกลับเข้าแนว</h3><p className="section-note">กรอกค่าจาก Survey / Navigation ที่ STA เดียวกัน · H บวกขวา / V บวกขึ้น เมื่อมองตามทิศขุด · มุมคลาดวัดเทียบกับเส้นสัมผัส Alignment ไม่ใช่มุมทิศหรือความชันสัมบูรณ์ · Lead เป็นคนละค่ากับระยะเยื้อง</p></div>
+        <div className="form-grid">
+          <Field label="STA หัวเจาะปัจจุบัน"><input value={currentSTA} onChange={e=>{setCurrentSTA(e.target.value);setRecovery(prev=>({...prev,initialStateConfirmed:false}));markDirty();}}/></Field>
+          {[
+            ['startDeviationH','เยื้องแนวราบ H (mm)'],['startDeviationV','เยื้องแนวดิ่ง V (mm)'],
+            ['startHeadingErrorDeg','มุมคลาดแนวราบ (°)'],['startPitchErrorDeg','มุมคลาดแนวดิ่ง (°)'],
+            ['recoveryDistanceM','ระยะเป้าหมายกลับเข้าแนว (m)'],['endpointToleranceMm','เกณฑ์ตำแหน่งปลายทาง ± (mm)'],
+            ['endpointHeadingToleranceDeg','เกณฑ์มุมปลายทาง ± (°)'],
+            ['maxTaperTurnDeg','เพดานมุม Taper ต่อริงแบบจำลอง (°)'],
+            ['responseDiameterMm','เส้นผ่านศูนย์กลางแบบจำลอง Taper (mm)'],
+          ].map(([key,label])=><Field key={key} label={label}><input type="number" step="any" value={recovery[key]} onChange={e=>{setRecovery(prev=>({...prev,[key]:e.target.value,...(key.startsWith('start')?{initialStateConfirmed:false}:{})}));markDirty();}}/></Field>)}
+        </div>
+        <label className="section-note"><input type="checkbox" checked={recovery.initialStateConfirmed} onChange={e=>{setRecovery(prev=>({...prev,initialStateConfirmed:e.target.checked}));markDirty();}}/> ยืนยันว่าตำแหน่งและมุมตั้งต้นมาจาก Survey / Navigation ที่ STA นี้</label>
+        <p className="section-note">ค่าเริ่มต้น 0 เป็นค่าตัวอย่าง · ระยะกลับเข้าแนวและเกณฑ์ปลายทางต้องกำหนดตามโครงการ · ค่าเส้นผ่านศูนย์กลาง 6300 mm และเพดาน Taper 0.55° เป็นสมมติฐานของแบบจำลองเดิม ต้องตรวจรูปทรงริงจริง เป็นคนละค่ากับ Articulation ของเครื่อง · คีย์ใช้จำลองผล Taper ไม่ใช่คำสั่งเลี้ยว TBM</p>
+      </section>
+      {planResult.endpoint && <InsightPanel level={needsRecalc?'unknown':planResult.verdict.status==='INFEASIBLE'?'critical':planResult.endpoint.level} title={needsRecalc?'ผลปลายทางก่อนแก้ไข — ต้องคำนวณใหม่':planResult.verdict.message}>
+        <p>ปลายแนว STA {planResult.recovery.endpointSTA} · H/V คาดการณ์ {planResult.endpoint.deviationH}/{planResult.endpoint.deviationV} mm · มุมคลาด H/V {planResult.endpoint.headingErrorDeg}/{planResult.endpoint.pitchErrorDeg}°</p>
+        <p>ระยะคลาดตามทิศทางแนวที่ปลายทาง {planResult.endpoint.longitudinalDeviationMm} mm (ค่าลบ = ยังไม่ถึงระนาบปลายแนวในแบบจำลอง)</p>
+        <p>ตำแหน่ง {planResult.endpoint.positionPass?'อยู่ใน':'นอก'}เกณฑ์ ±{planResult.endpoint.toleranceMm} mm · ทิศทาง {planResult.endpoint.headingPass?'อยู่ใน':'นอก'}เกณฑ์ ±{planResult.endpoint.headingToleranceDeg}°</p>
+        <p>ข้อมูลตั้งต้น: {planResult.recovery.initialStateConfirmed?'ผู้ใช้ยืนยันจาก Survey / Navigation':'ค่าตัวอย่าง ยังไม่ยืนยันสนาม'} · แนวดิ่ง {planResult.recovery.verticalKnown?'ครอบคลุมช่วงที่วางแผน':'ยังไม่ครบ จึงยืนยันปลายทางไม่ได้'}</p>
+        <p>ระยะเหลือ {planResult.recovery.totalDistanceM} m · ระยะเป้าหมายกลับเข้าแนว {planResult.recovery.effectiveDistanceM.toFixed(1)} m</p>
+        <p>จุดปลายแนวถูกตรวจที่ STA จริง{planResult.recovery.finalRingBeyondEndpointM>0?` ซึ่งอยู่ก่อนขอบริงสุดท้าย ${planResult.recovery.finalRingBeyondEndpointM} m`:''} · ผลเป็นแบบจำลอง ต้องตรวจข้อจำกัดเครื่องและค่าตรวจสนามก่อนใช้</p>
+        <p>แนวดิ่งอ้างอิงระดับปลายแต่ละช่วงและประมาณโค้งด้วยพาราโบลา ไม่ใช่การนำเข้าพิกัดแนว 3D ที่สอบเทียบแล้ว</p>
+      </InsightPanel>}
+      <RecoveryChart planResult={planResult} onSelectStep={setScrubStep}/>
       <PlanInsight summary={summary} actions={<button className="btn btn-outline" onClick={()=>showIssues('issues')}>ตรวจริงที่มีข้อเตือน</button>}><p>ผลคาดการณ์จากแบบจำลอง · ข้อมูลสนามที่ใช้ปรับน้ำหนัก {planResult.aiWeights?.sampleSize||0} ริง · จำนวนข้อมูลไม่ใช่ความแม่นยำ</p></PlanInsight>
       <div className="stat-grid">
         <StatCard label="จำนวนริงในแผน" value={planResult.totalRings} unit="ริง"/>
@@ -802,7 +837,9 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   <th className="p-2.5">Suit.</th>
                   <th className="p-2.5">After H</th>
                   <th className="p-2.5">After V</th>
-                  <th className="p-2.5">DTA Dev</th>
+                  <th className="p-2.5">DTA H</th>
+                  <th className="p-2.5">DTA V</th>
+                  <th className="p-2.5">มุมคลาด H/V</th>
                   <th className="p-2.5">Tail Gap (L/R)</th>
                   <th className="p-2.5">Risk Score</th>
                   <th className="p-2.5">💡 AI Reasoning (เหตุผลการตัดสินใจ)</th>
@@ -857,6 +894,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                       <td className="p-2.5 text-cyan-400 font-bold">
                         {r.deviationMm > 0 ? `+${r.deviationMm}` : r.deviationMm} mm
                       </td>
+                      <td className="p-2.5">{r.deviationVMm} mm</td>
+                      <td className="p-2.5">{r.headingErrorDeg}/{r.pitchErrorDeg}°</td>
                       <td className="p-2.5 font-mono text-xs">
                         <span className={r.gapL < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>L:{r.gapL}</span> /{' '}
                         <span className={r.gapR < 15 ? 'text-amber-400 font-bold' : 'text-text-muted'}>R:{r.gapR}</span>
@@ -880,7 +919,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
           </div></div>
         )}
       </div>
-      {selectedRing && <div className="two-columns"><InsightPanel level={assessRing(selectedRing,{...getLimits(gapSettings),lead:planResult.maxTolerance}).level} title={`${selectedRing.ringNum} · ${selectedRing.selectedKey} · STA ${selectedRing.sta}`}><p>{selectedRing.aiReasoning}</p><p>After H/V {selectedRing.afterH}/{selectedRing.afterV} mm · DTA {selectedRing.deviationMm} mm</p></InsightPanel><GapVisualizer gapT={selectedRing.gapT} gapB={selectedRing.gapB} gapL={selectedRing.gapL} gapR={selectedRing.gapR} warnThreshold={gapSettings.warnThreshold} blockThreshold={gapSettings.criticalThreshold}/></div>}
+      {selectedRing && <div className="two-columns"><InsightPanel level={assessRing(selectedRing,{...getLimits(gapSettings),lead:planResult.maxTolerance}).level} title={`${selectedRing.ringNum} · ${selectedRing.selectedKey} · STA ${selectedRing.sta}`}><p>{selectedRing.aiReasoning}</p><p>After H/V {selectedRing.afterH}/{selectedRing.afterV} mm · DTA H/V {selectedRing.deviationMm}/{selectedRing.deviationVMm} mm · มุมคลาด {selectedRing.headingErrorDeg}/{selectedRing.pitchErrorDeg}°</p></InsightPanel><GapVisualizer gapT={selectedRing.gapT} gapB={selectedRing.gapB} gapL={selectedRing.gapL} gapR={selectedRing.gapR} warnThreshold={gapSettings.warnThreshold} blockThreshold={gapSettings.criticalThreshold}/></div>}
     </div>
   );
 }
