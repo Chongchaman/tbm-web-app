@@ -49,6 +49,18 @@ test('every key recommendation uses allowed transitions, actual widths, and symm
  for(const l of left)assert.equal(l.leadReq,-right.find(r=>r.key===l.key).leadReq);
 });
 
+test('single-ring type switches constrain current keys and lookahead without changing the installed predecessor',()=>{
+ for(const beforeKey of Object.keys(KEY_DATA)) for(const allowedTypes of [[],['U'],['R'],['L'],['U','R'],['U','L'],['R','L'],['U','R','L']]) {
+  const candidates=evaluateCandidates({beforeKey,allowedTypes,beforeHLead:12,beforeVLead:-8});
+  const expectedKeys=NEXT_RING_TABLE[beforeKey].filter(key=>allowedTypes.includes(KEY_DATA[key].type));
+  assert.deepEqual(candidates.map(candidate=>candidate.key).sort(),expectedKeys.sort());
+  for(const candidate of candidates) {
+   const next=evaluateCandidates({beforeKey:candidate.key,beforeHLead:candidate.afterHLead,beforeVLead:candidate.afterVLead,allowedTypes,lookahead:false});
+   assert.equal(candidate.nextCost,next.length?Math.min(...next.map(item=>item.cost)):1000000);
+  }
+ }
+});
+
 test('sequence planner is deterministic, preserves transitions, and sums actual ring lengths',()=>{
  const input={startKey:'L2',startHLead:38.39,startVLead:32.47,ringCount:25,alignmentType:'right',radius:500};
  const plan=runAutoPlan(input);assert.deepEqual(plan,runAutoPlan(input));

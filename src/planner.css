@@ -230,6 +230,15 @@ body { background-color:var(--bg); background-image:var(--ui-backdrop,none); bac
 .preview-button { padding:9px; text-align:center; background:var(--acc); color:var(--acc-contrast); border-radius:8px; font-size:.85em; font-weight:600; }
 .settings-actions { display:flex; gap:12px; flex-wrap:wrap; justify-content:space-between; padding-top:20px; margin-top:24px; border-top:1px solid var(--border); }
 .settings-actions .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+.segment-selector { border:0; padding:0; margin-top:20px; min-width:0; }
+.segment-selector legend { font-size:.875rem; font-weight:600; margin-bottom:10px; }
+.segment-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.segment-option { display:flex; align-items:center; gap:7px; padding:12px 8px; border:1px solid var(--border); border-radius:8px; background:var(--surf); cursor:pointer; }
+.segment-option.is-enabled { border-color:var(--acc); background:var(--acc-soft); }
+.segment-option input { flex:none; width:16px; height:16px; }
+.segment-option strong { display:block; font-size:.8rem; white-space:nowrap; }
+.segment-option small { display:block; color:var(--text-muted); font-size:.75rem; }
+.segment-selector p { margin-top:10px; }
 @media(max-width:700px) { .settings-layout { grid-template-columns:minmax(0,1fr); } .settings-preview { position:static; } .settings-actions { flex-direction:column; } .settings-actions .page-actions { justify-content:flex-end; } }
 @media(max-width:390px) { .color-presets { grid-template-columns:repeat(2,minmax(0,1fr)); } .custom-color { grid-template-columns:90px minmax(0,1fr); gap:10px; } }
 .app-content input,.app-content select { min-width:0; max-width:100%; }
