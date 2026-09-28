@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { LayoutDashboard, Calculator, Sparkles, Compass, History, Database, Droplets, HardHat, Menu, X, Cloud, Sun, Moon, Settings2, Download } from 'lucide-react';
+import { LayoutDashboard, Calculator, Sparkles, Compass, History, Database, Droplets, HardHat, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen } from 'lucide-react';
 const AdvancePlannerView = lazy(() => import('./views/AdvancePlannerView'));
 const AutoPlannerView = lazy(() => import('./views/AutoPlannerView'));
 const PlannerView = lazy(() => import('./views/PlannerView'));
@@ -7,6 +7,7 @@ const DashboardView = lazy(() => import('./views/DashboardView'));
 const HistoryLogView = lazy(() => import('./views/HistoryLogView'));
 const ConsumablesView = lazy(() => import('./views/ConsumablesView'));
 const MasterDataView = lazy(() => import('./views/MasterDataView'));
+const GuideView = lazy(() => import('./views/GuideView'));
 import ErrorBoundary from './components/ErrorBoundary';
 import SupabaseModal from './components/SupabaseModal';
 import { Field, StatusBadge, Dialog } from './components/PlannerUI';
@@ -23,6 +24,7 @@ const menus = [
   { id:'history', label:'ประวัติและข้อมูลสนาม', icon:History },
   { id:'consumables', label:'สารปรับปรุงดิน', icon:Droplets },
   { id:'masterdata', label:'ข้อมูลแนวและสัดส่วน', icon:Database },
+  { id:'guide', label:'คู่มือการใช้งาน', icon:BookOpen },
 ];
 const sortRings = rings => [...rings].sort((a,b) => ringNumber(a)-ringNumber(b));
 const identity = ring => `${recordKind(ring)}:${ringNumber(ring)}`;
@@ -157,6 +159,7 @@ export default function AppShell() {
       {activeTab==='history' && <HistoryLogView ringLogs={sortRings([...ringLogs,...plans])} initialFilter={historyFilter} onUpdateRing={(existing,record)=>writeRecords([record],existing)} onAddRing={record=>writeRecords([record])} onBatchDelete={removeRecords}/>}
       {activeTab==='consumables' && <ConsumablesView ringLogs={ringLogs}/>}
       {activeTab==='masterdata' && <MasterDataView onNavigate={navigate}/> }
+      {activeTab==='guide' && <GuideView onNavigate={navigate}/>}
       </Suspense>
     </main></div></div>
     {preferences && <div className="dialog-backdrop" onClick={()=>setPreferences(false)}><Dialog className="dialog preferences-dialog" label="ตั้งค่าการแสดงผล" onClose={()=>setPreferences(false)} onClick={e=>e.stopPropagation()}><div className="section-heading"><h2>ตั้งค่าการแสดงผล</h2><button className="icon-button" autoFocus aria-label="ปิดการตั้งค่า" onClick={()=>setPreferences(false)}><X size={18}/></button></div><div className="stack"><Field label="ฟอนต์"><select value={fontFamily} onChange={e=>setFontFamily(e.target.value)}>{[['sarabun','Sarabun'],['prompt','Prompt'],['noto','Noto Sans Thai'],['kanit','Kanit'],['chakra','Chakra Petch'],['mitr','Mitr']].map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></Field><Field label="ขนาดข้อความ"><select value={fontSize} onChange={e=>setFontSize(e.target.value)}>{[['sm','กระชับ'],['md','มาตรฐาน'],['lg','ใหญ่'],['xl','ใหญ่พิเศษ']].map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></Field><Field label="ระยะห่าง"><select value={density} onChange={e=>setDensity(e.target.value)}><option value="comfortable">อ่านสบาย</option><option value="compact">กระชับ</option></select></Field></div><StatusBadge level="normal">จำค่าการแสดงผลในเครื่องนี้</StatusBadge></Dialog></div>}
