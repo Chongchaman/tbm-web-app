@@ -1,49 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Database, 
-  Grid, 
-  RotateCw, 
-  Sliders, 
-  CheckCircle2, 
-  XCircle, 
-  AlertCircle,
-  Table,
-  Layers,
-  Compass,
-  TrendingUp,
-  Plus,
-  Trash2,
-  Save,
-  RotateCcw,
-  Download,
-  Upload,
-  ArrowRight,
-  Sparkles,
-  ShieldAlert,
-  Info,
-  Check,
-  Ban,
-  Lock,
-  Unlock,
-  Package,
-  Boxes
-} from 'lucide-react';
-import { KEY_DATA, SUITABILITY_MATRIX, TBM_SPECS } from '../data/tbmConstants';
+import { PageHeader, Field, InsightPanel, ValidationErrors } from '../components/PlannerUI';
+import { validateAlignment, validateGapSettings } from '../services/decisionSupport';
+import { useState, useMemo } from 'react';
+import { Database, Grid, RotateCw, CheckCircle2, Compass, TrendingUp, Plus, Trash2, Save, RotateCcw, Sparkles, Ban, Lock, Boxes } from 'lucide-react';
+import { KEY_DATA, SUITABILITY_MATRIX } from '../data/tbmConstants';
 import { calculateTaperGeometry } from '../services/calculator';
-import { 
-  DEFAULT_ALIGNMENT_SECTIONS, 
-  DEFAULT_VERTICAL_ALIGNMENT,
-  createNewSection, 
-  createNewVerticalElement,
-  parseSTA,
-  formatSTA,
-  estimateRingCount,
-  computeRatioBreakdown,
-  findBestRatioForSection,
-  DEFAULT_GAP_SETTINGS
-} from '../services/advancePlanner';
-import GapVisualizer from '../components/GapVisualizer';
-import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
+import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, createNewSection, createNewVerticalElement, parseSTA, estimateRingCount, computeRatioBreakdown, findBestRatioForSection, DEFAULT_GAP_SETTINGS } from '../services/advancePlanner';
+
+
 
 export default function MasterDataView({ onNavigate = () => {} }) {
   const [activeTab, setActiveTab] = useState('horizontal'); // 'horizontal' | 'vertical' | 'keys' | 'suitability' | 'simulator'
@@ -82,6 +45,8 @@ export default function MasterDataView({ onNavigate = () => {} }) {
   });
 
   const [savedSuccessMsg, setSavedSuccessMsg] = useState('');
+  const [validationErrors, setValidationErrors] = useState([]);
+  const alignmentErrors = validateAlignment(hSections, vProfile);
 
   // Taper simulator state
   const [simRoll, setSimRoll] = useState(0);
@@ -96,23 +61,29 @@ export default function MasterDataView({ onNavigate = () => {} }) {
 
   // Save Horizontal Alignment
   const handleSaveHAlignment = () => {
+    if (alignmentErrors.length) { setValidationErrors(alignmentErrors); return false; }
+    setValidationErrors([]);
     try {
       localStorage.setItem('tbm_horizontal_alignment', JSON.stringify(hSections));
       setSavedSuccessMsg('บันทึกการตั้งค่าแนวราบ (Horizontal Alignment) เรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 4000);
+      return true;
     } catch (e) {
-      alert('Error saving horizontal alignment: ' + e.message);
+      setValidationErrors(['บันทึกแนวราบไม่สำเร็จ: '+e.message]); return false;
     }
   };
 
   // Save Vertical Alignment
   const handleSaveVAlignment = () => {
+    if (alignmentErrors.length) { setValidationErrors(alignmentErrors); return false; }
+    setValidationErrors([]);
     try {
       localStorage.setItem('tbm_vertical_alignment', JSON.stringify(vProfile));
       setSavedSuccessMsg('บันทึกการตั้งค่าแนวดิ่ง (Vertical Alignment) เรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 4000);
+      return true;
     } catch (e) {
-      alert('Error saving vertical alignment: ' + e.message);
+      setValidationErrors(['บันทึกแนวดิ่งไม่สำเร็จ: '+e.message]); return false;
     }
   };
 
@@ -138,8 +109,8 @@ export default function MasterDataView({ onNavigate = () => {} }) {
 
   // Apply to Advance Planner
   const handleApplyToPlanner = () => {
-    handleSaveHAlignment();
-    handleSaveVAlignment();
+    if (alignmentErrors.length) { setValidationErrors(alignmentErrors); return; }
+    if (!handleSaveHAlignment() || !handleSaveVAlignment()) return;
     onNavigate('advanceplanner');
   };
 
@@ -209,66 +180,18 @@ export default function MasterDataView({ onNavigate = () => {} }) {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surf-2 border border-white/10 rounded-2xl p-6 shadow-xl">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
-              <Compass size={13} /> MASTER SETTINGS & ALIGNMENT
-            </span>
-            <span className="text-xs text-text-muted">MRT Purple Line Engineering Configuration</span>
-          </div>
-          <h2 className="text-2xl font-bold text-text tracking-tight">Alignment Master Data, Segment Rules & Geometry</h2>
-          <p className="text-sm text-text-muted mt-1">
-            ตั้งค่าแนวราบ (H Alignment), แนวดิ่ง (V Alignment), ข้อจำกัดการใช้ Segment (ห้ามใช้ UN/RT/LT), และฐานข้อมูล 33 คีย์
-          </p>
-        </div>
+    <div className="stack pb-12">
+      <PageHeader eyebrow="Master data · Alignment & quantities" title="ข้อมูลแนว สัดส่วนผลิต และเซ็กเมนต์" description="จัดการแนวราบ แนวดิ่ง ชนิดคีย์ที่อนุญาต และยอดประมาณการผลิตในที่เดียว"/>
+      <div className="tab-strip">{[['horizontal','แนวราบและ Ratio'],['vertical','แนวดิ่ง'],['keys','33 Key Database'],['suitability','Suitability Matrix'],['simulator','Taper Simulator']].map(([value,label])=><button key={value} aria-pressed={activeTab===value} onClick={()=>setActiveTab(value)}>{label}</button>)}</div>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-wrap items-center gap-1 bg-surf-3 p-1 rounded-xl border border-white/10 font-mono text-xs">
-          <button
-            onClick={() => setActiveTab('horizontal')}
-            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-              activeTab === 'horizontal' ? 'bg-acc text-black shadow-md' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            <Compass size={14} /> แนวราบ & สัดส่วน Ratio (H Alignment & Ratio)
-          </button>
-          <button
-            onClick={() => setActiveTab('vertical')}
-            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
-              activeTab === 'vertical' ? 'bg-acc text-black shadow-md' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            <TrendingUp size={14} /> แนวดิ่ง (V Alignment)
-          </button>
-          <button
-            onClick={() => setActiveTab('keys')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-              activeTab === 'keys' ? 'bg-acc text-black shadow-md' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            33 Key Database
-          </button>
-          <button
-            onClick={() => setActiveTab('suitability')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-              activeTab === 'suitability' ? 'bg-acc text-black font-bold' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            Suitability Matrix
-          </button>
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-              activeTab === 'simulator' ? 'bg-acc text-black font-bold' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            Taper Simulator
-          </button>
-        </div>
-      </div>
+      <InsightPanel level={alignmentErrors.length?'warning':'normal'} title={alignmentErrors.length?`พบ ${alignmentErrors.length} จุดในข้อมูลแนวที่ต้องแก้ไข`:'ตรวจโครงสร้างแนวและ Ratio แล้ว'}>
+        <p>ตรวจ STA ต่อเนื่อง รัศมี สัดส่วนรวม และชนิดเซ็กเมนต์ที่อนุญาต · BOQ เป็นยอดประมาณการตามสัดส่วน</p>
+        {alignmentErrors.length>0 && <ul>{alignmentErrors.map((error,index)=><li key={index}>{error}</li>)}</ul>}
+      </InsightPanel>
+      <ValidationErrors errors={validationErrors}/>
+      <details className="advanced-options"><summary>เกณฑ์ Tail Gap ที่ใช้ร่วมกันทุกโหมด</summary><div className="form-grid">
+        {[['initialGapTop','Gap เริ่มต้นบน (mm)'],['initialGapBottom','Gap เริ่มต้นล่าง (mm)'],['initialGapLeft','Gap เริ่มต้นซ้าย (mm)'],['initialGapRight','Gap เริ่มต้นขวา (mm)'],['warnThreshold','Gap เกณฑ์เตือน (mm)'],['criticalThreshold','Gap เกณฑ์วิกฤต (mm)']].map(([key,label])=><Field key={key} label={label}><input type="number" min="0" step=".1" value={gapSettings[key]} onChange={e=>setGapSettings(previous=>({...previous,[key]:e.target.value}))}/></Field>)}
+      </div><div className="page-actions mt-4"><button className="btn btn-acc" onClick={()=>{const errors=validateGapSettings(gapSettings);if(errors.length){setValidationErrors(errors);return;}try{localStorage.setItem('tbm_gap_settings',JSON.stringify(gapSettings));setValidationErrors([]);setSavedSuccessMsg('บันทึกเกณฑ์ Gap สำหรับทุกโหมดแล้ว');}catch{setValidationErrors(['บันทึกเกณฑ์ Gap ในเครื่องไม่สำเร็จ']);}}}>บันทึกเกณฑ์ Gap</button></div><p className="section-note mt-3">ค่าตั้งต้น Nominal 50 mm · เตือน ≤15 mm · วิกฤต ≤5 mm · แบบจำลองคาดการณ์ 0–100 mm</p></details>
 
       {/* Success Notification */}
       {savedSuccessMsg && (
@@ -286,7 +209,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div>
               <h3 className="text-base font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                <Compass size={18} className="text-acc" /> จัดการแนวราบ (Horizontal Alignment) & กฎห้ามใช้ Segment
+                <Compass size={18} className="text-acc" /> แนวราบและชนิดเซ็กเมนต์ที่อนุญาต
               </h3>
               <p className="text-xs text-text-muted mt-0.5">
                 กำหนดช่วงแนวราบ รัศมีโค้ง ระยะ STA และเลือกเปิด/ปิด Segment ที่อนุญาตหรือห้ามใช้ในแต่ละช่วง
@@ -321,7 +244,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               <button
                 type="button"
                 onClick={handleApplyToPlanner}
-                className="btn px-4 py-2 text-xs font-bold flex items-center gap-1.5 bg-acc text-black hover:bg-cyan-300 shadow-lg shadow-cyan-400/20"
+                className="btn btn-acc"
               >
                 <Sparkles size={15} /> นำไปใช้ใน Advance Planner
               </button>
@@ -334,11 +257,11 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               <div className="flex items-center gap-2">
                 <Boxes size={18} className="text-acc" />
                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">
-                  สรุปยอดรวมความต้องการ Segment ทั้งโครงการ (Factory Inventory & BOQ Estimation)
+                  ยอดผลิตเซ็กเมนต์ประมาณการทั้งโครงการ
                 </h4>
               </div>
               <span className="text-xs text-text-muted font-mono">
-                คำนวณตามระยะทางและสัดส่วนที่ล็อกไว้ของทั้ง {hSections.length} ช่วง
+                คำนวณตามระยะทางและสัดส่วนเป้าหมายของทั้ง {hSections.length} ช่วง
               </span>
             </div>
 
@@ -352,7 +275,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               hSections.forEach(sec => {
                 const dist = Math.abs(parseSTA(sec.endSTA) - parseSTA(sec.startSTA));
                 const est = estimateRingCount(sec.startSTA, sec.endSTA, sec.ratio);
-                const bd = computeRatioBreakdown(sec.ratio, est || 1);
+                const bd = computeRatioBreakdown(sec.ratio, est);
                 totalMeters += dist;
                 totalRingsEst += est;
                 totalUN += bd.unCount;
@@ -413,13 +336,13 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   className="bg-surf-2 border border-white/10 rounded-2xl p-4 space-y-3.5 hover:border-acc/40 transition-all relative group"
                 >
                   {/* Card Header */}
-                  <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                  <div className="flex flex-wrap gap-3 items-center justify-between border-b border-white/5 pb-2.5">
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        value={sec.code}
+                        aria-label={`ช่วง ${sec.code}: รหัสช่วง`} value={sec.code}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].code = e.target.value;
                           setHSections(copy);
                         }}
@@ -427,9 +350,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       />
                       <input
                         type="text"
-                        value={sec.name}
+                        aria-label={`ช่วง ${sec.code}: ชื่อช่วง`} value={sec.name}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].name = e.target.value;
                           setHSections(copy);
                         }}
@@ -442,7 +365,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       <button
                         type="button"
                         onClick={() => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           const curLocked = copy[idx].isLocked !== false;
                           copy[idx].isLocked = !curLocked;
                           copy[idx].planningMode = !curLocked ? 'locked_ratio' : 'ai_senior';
@@ -453,15 +376,15 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                             : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                         }`}
-                        title={sec.isLocked !== false ? 'ล็อคสัดส่วนตามยอดสั่งผลิต (AI จะไม่เปลี่ยนอัตราส่วน)' : 'ให้ AI Senior Engineer ปรับแต่ง Segment ให้อัตโนมัติ'}
+                        title={sec.isLocked !== false ? 'ใช้สัดส่วนนี้เป็นเป้าหมายในการเลือกคีย์ และตรวจยอดจริงหลังคำนวณ' : 'เลือกคีย์ตามผลตรวจโดยไม่ยึดสัดส่วนเป้าหมาย'}
                       >
                         {sec.isLocked !== false ? (
                           <>
-                            <Lock size={11} /> ล็อคยอดสั่งผลิต
+                            <Lock size={11} /> ใช้ Ratio เป้าหมาย
                           </>
                         ) : (
                           <>
-                            <Sparkles size={11} /> AI ปรับอัตโนมัติ
+                            <Sparkles size={11} /> เลือกตามผลตรวจ
                           </>
                         )}
                       </button>
@@ -482,9 +405,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <div className="field">
                       <label className="text-xs text-text-muted block">Type</label>
                       <select
-                        value={sec.sectionType}
+                        aria-label={`ช่วง ${sec.code}: ประเภทแนว`} value={sec.sectionType}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].sectionType = e.target.value;
                           setHSections(copy);
                         }}
@@ -500,9 +423,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <div className="field">
                       <label className="text-xs text-text-muted block">Direction</label>
                       <select
-                        value={sec.direction}
+                        aria-label={`ช่วง ${sec.code}: ทิศทาง`} value={sec.direction}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].direction = e.target.value;
                           setHSections(copy);
                         }}
@@ -518,9 +441,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       <label className="text-xs text-text-muted block">Radius (m)</label>
                       <input
                         type="number"
-                        value={sec.radius}
+                        aria-label={`ช่วง ${sec.code}: รัศมี (m)`} value={sec.radius}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].radius = Number(e.target.value) || 0;
                           setHSections(copy);
                         }}
@@ -535,9 +458,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       <span className="text-text-muted text-xs block">Start STA</span>
                       <input
                         type="text"
-                        value={sec.startSTA}
+                        aria-label={`ช่วง ${sec.code}: STA เริ่มต้น`} value={sec.startSTA}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].startSTA = e.target.value;
                           setHSections(copy);
                         }}
@@ -548,9 +471,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                       <span className="text-text-muted text-xs block">End STA</span>
                       <input
                         type="text"
-                        value={sec.endSTA}
+                        aria-label={`ช่วง ${sec.code}: STA สิ้นสุด`} value={sec.endSTA}
                         onChange={(e) => {
-                          const copy = [...hSections];
+                          const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                           copy[idx].endSTA = e.target.value;
                           setHSections(copy);
                         }}
@@ -629,9 +552,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           type="number"
                           min="0"
                           disabled={!allowU}
-                          value={sec.ratio.un}
+                          aria-label={`ช่วง ${sec.code}: Ratio UN`} value={sec.ratio.un}
                           onChange={(e) => {
-                            const copy = [...hSections];
+                            const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                             copy[idx].ratio.un = Math.max(0, Number(e.target.value) || 0);
                             setHSections(copy);
                           }}
@@ -645,9 +568,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           type="number"
                           min="0"
                           disabled={!allowR}
-                          value={sec.ratio.rt}
+                          aria-label={`ช่วง ${sec.code}: Ratio RT`} value={sec.ratio.rt}
                           onChange={(e) => {
-                            const copy = [...hSections];
+                            const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                             copy[idx].ratio.rt = Math.max(0, Number(e.target.value) || 0);
                             setHSections(copy);
                           }}
@@ -661,9 +584,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           type="number"
                           min="0"
                           disabled={!allowL}
-                          value={sec.ratio.lt}
+                          aria-label={`ช่วง ${sec.code}: Ratio LT`} value={sec.ratio.lt}
                           onChange={(e) => {
-                            const copy = [...hSections];
+                            const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                             copy[idx].ratio.lt = Math.max(0, Number(e.target.value) || 0);
                             setHSections(copy);
                           }}
@@ -684,7 +607,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                           key={preset.label}
                           type="button"
                           onClick={() => {
-                            const copy = [...hSections];
+                            const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                             copy[idx].ratio = {
                               un: allowU ? preset.r.un : 0,
                               rt: allowR ? preset.r.rt : 0,
@@ -703,14 +626,17 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <button
                       type="button"
                       onClick={() => {
-                        const best = findBestRatioForSection(sec);
-                        const copy = [...hSections];
+                        const sectionErrors = validateAlignment([sec], []);
+                          if (sectionErrors.length) { setValidationErrors(sectionErrors); return; }
+                          let best;
+                          try { best = findBestRatioForSection(sec, 'U4', -20, -10, 55, gapSettings); } catch(error) { setValidationErrors([error.message]); return; }
+                        const copy = hSections.map(section=>({...section,ratio:{...section.ratio},allowedTypes:[...(section.allowedTypes||[])]}));
                         copy[idx].ratio = best;
                         setHSections(copy);
                       }}
                       className="w-full mt-1 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-bold text-xs flex items-center justify-center gap-1 transition-colors font-sans"
                     >
-                      <Sparkles size={12} /> Auto-Optimize Ratio (ค้นหาอัตราส่วนที่ดีที่สุด)
+                      <Sparkles size={12} /> เปรียบเทียบและแนะนำ Ratio
                     </button>
                   </div>
                 </div>
@@ -763,7 +689,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
               <button
                 type="button"
                 onClick={handleApplyToPlanner}
-                className="btn px-4 py-2 text-xs font-bold flex items-center gap-1.5 bg-acc text-black hover:bg-cyan-300 shadow-lg shadow-cyan-400/20"
+                className="btn btn-acc"
               >
                 <Sparkles size={15} /> นำไปใช้ใน Advance Planner
               </button>
@@ -777,13 +703,13 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                 key={elem.id}
                 className="bg-surf-2 border border-white/10 rounded-2xl p-4 space-y-3 hover:border-acc/40 transition-all relative"
               >
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex flex-wrap gap-3 items-center justify-between border-b border-white/5 pb-2">
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={elem.code}
+                      aria-label={`ช่วง ${elem.code}: รหัสช่วง`} value={elem.code}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].code = e.target.value;
                         setVProfile(copy);
                       }}
@@ -791,9 +717,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     />
                     <input
                       type="text"
-                      value={elem.name}
+                      aria-label={`ช่วง ${elem.code}: ชื่อช่วง`} value={elem.name}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].name = e.target.value;
                         setVProfile(copy);
                       }}
@@ -817,9 +743,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <span className="text-text-muted text-xs block">Start STA</span>
                     <input
                       type="text"
-                      value={elem.startSTA}
+                      aria-label={`ช่วง ${elem.code}: STA เริ่มต้น`} value={elem.startSTA}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].startSTA = e.target.value;
                         setVProfile(copy);
                       }}
@@ -830,9 +756,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <span className="text-text-muted text-xs block">End STA</span>
                     <input
                       type="text"
-                      value={elem.endSTA}
+                      aria-label={`ช่วง ${elem.code}: STA สิ้นสุด`} value={elem.endSTA}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].endSTA = e.target.value;
                         setVProfile(copy);
                       }}
@@ -848,9 +774,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <input
                       type="number"
                       step="0.001"
-                      value={elem.startElev}
+                      aria-label={`ช่วง ${elem.code}: ระดับเริ่มต้น (m)`} value={elem.startElev}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].startElev = Number(e.target.value) || 0;
                         setVProfile(copy);
                       }}
@@ -863,9 +789,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <input
                       type="number"
                       step="0.001"
-                      value={elem.endElev}
+                      aria-label={`ช่วง ${elem.code}: ระดับสิ้นสุด (m)`} value={elem.endElev}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].endElev = Number(e.target.value) || 0;
                         setVProfile(copy);
                       }}
@@ -878,9 +804,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <input
                       type="number"
                       step="0.01"
-                      value={elem.gradePct}
+                      aria-label={`ช่วง ${elem.code}: Grade (%)`} value={elem.gradePct}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].gradePct = Number(e.target.value) || 0;
                         setVProfile(copy);
                       }}
@@ -896,9 +822,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                   <div>
                     <span className="text-text-muted text-xs block">Vertical Curve</span>
                     <select
-                      value={elem.curveType}
+                      aria-label={`ช่วง ${elem.code}: ประเภทแนวดิ่ง`} value={elem.curveType}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].curveType = e.target.value;
                         setVProfile(copy);
                       }}
@@ -914,9 +840,9 @@ export default function MasterDataView({ onNavigate = () => {} }) {
                     <span className="text-text-muted text-xs block">Radius Rv (m)</span>
                     <input
                       type="number"
-                      value={elem.radiusV}
+                      aria-label={`ช่วง ${elem.code}: รัศมีแนวดิ่ง (m)`} value={elem.radiusV}
                       onChange={(e) => {
-                        const copy = [...vProfile];
+                        const copy = vProfile.map(element=>({...element}));
                         copy[idx].radiusV = Number(e.target.value) || 0;
                         setVProfile(copy);
                       }}

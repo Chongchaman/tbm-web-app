@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Kanit:wght@300;400;500;600;700&family=Mitr:wght@300;400;500;600&family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Sarabun:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --color-bg: #05070a;
-  --color-surf: #0f121a;
-  --color-surf-2: #161a24;
-  --color-surf-3: #1c2230;
-  --color-acc: #00d4ff;
-  --color-yes: #00e676;
-  --color-fair: #ffab40;
-  --color-no: #ff5252;
-  --color-text: #f8fafc;
-  --color-text-muted: #94a3b8;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surf: var(--surf);
+  --color-surf-2: var(--surf-2);
+  --color-surf-3: var(--surf-3);
+  --color-acc: var(--acc);
+  --color-yes: var(--yes);
+  --color-fair: var(--fair);
+  --color-no: var(--no);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
   --font-sans: var(--font-current-sans, 'Prompt', sans-serif);
   --font-mono: 'JetBrains Mono', monospace;
 }
@@ -72,10 +72,8 @@ html[data-font-family="mitr"] {
   --font-current-sans: 'Mitr', sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 }
 
 html {

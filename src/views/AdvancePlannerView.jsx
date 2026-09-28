@@ -1,83 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Compass, 
-  Sparkles, 
-  Layers, 
-  Sliders, 
-  TrendingUp, 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  Download, 
-  Database, 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  ArrowRight, 
-  Check, 
-  ShieldAlert, 
-  Percent,
-  SlidersHorizontal,
-  Info,
-  Play,
-  RotateCcw,
-  Eye,
-  MapPin,
-  Maximize2,
-  Save,
-  Lock,
-  Unlock,
-  Boxes,
-  Lightbulb,
-  Activity,
-  Gauge,
-  Zap
-} from 'lucide-react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { PageHeader, PlanInsight, StatCard, Field, ValidationErrors, InsightPanel } from '../components/PlannerUI';
+import LeadChart from '../components/LeadChart';
+import { latestMeasured, nextRingNumber, ringNumber, summarizeRings, getLimits, assessRing, exportCSV, validateAlignment, validatePlanningInput } from '../services/decisionSupport';
+import { useState } from 'react';
+import { Sparkles, Layers, Sliders, TrendingUp, CheckCircle2, Download, Plus, Trash2, SlidersHorizontal, RotateCcw, Eye, Save, Lock, Lightbulb } from 'lucide-react';
+
+
 import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
 import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
-import { 
-  DEFAULT_ALIGNMENT_SECTIONS, 
-  DEFAULT_VERTICAL_ALIGNMENT, 
-  RATIO_PRESETS,
-  runAdvancePlan, 
-  computeRatioBreakdown,
-  estimateRingCount,
-  createNewSection,
-  findBestRatioForSection,
-  DEFAULT_GAP_SETTINGS,
-  formatSTA, 
-  parseSTA,
-  SEGMENT_SIZES 
-} from '../services/advancePlanner';
+import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, parseSTA } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
-import { getAIConfidenceLevel } from '../services/aiCalibrator';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
 
-export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {}, onNavigate = () => {} }) {
-  const lastRing = ringLogs.length > 0 ? ringLogs[ringLogs.length - 1] : null;
+
+
+export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {}, onNavigate = () => {}, theme = 'dark' }) {
+  const lastRing = latestMeasured(ringLogs) || ringLogs.at(-1) || null;
 
   // Sections State (Dynamic CRUD & LocalStorage sync with safe fallback)
   const [sections, setSections] = useState(() => {
@@ -110,12 +48,12 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [strategy, setStrategy] = useState('senior_ai');
 
   // Tail Gap Configuration
-  const [gapSettings, setGapSettings] = useState(() => {
+  const [gapSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('tbm_gap_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.warnThreshold === 'number') return parsed;
+        if (parsed && typeof parsed === 'object') return { ...DEFAULT_GAP_SETTINGS, ...parsed };
       }
     } catch (e) {
       console.error(e);
@@ -123,7 +61,6 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     return DEFAULT_GAP_SETTINGS;
   });
 
-  const [isGapDrawerOpen, setIsGapDrawerOpen] = useState(false);
   const [isSectionConfigExpanded, setIsSectionConfigExpanded] = useState(false);
 
   const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'U4');
@@ -140,19 +77,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   // Active Simulation Step Index for 2D Map Scrubber
   const [scrubStep, setScrubStep] = useState(1);
+  const [resultFilter, setResultFilter] = useState('all');
+  const [inputErrors, setInputErrors] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   // Plan Calculation State (Safe initialization)
   const [planResult, setPlanResult] = useState(() => {
     try {
-      return runAdvancePlan({
-        sections: DEFAULT_ALIGNMENT_SECTIONS,
-        verticalAlignment: DEFAULT_VERTICAL_ALIGNMENT,
-        startKey: 'U4',
-        startHLead: -20,
-        startVLead: -10,
-        maxTolerance: 55.0,
-        steeringSign: 'steering_bias',
-      });
+      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startRingNumber: ringNumber({ ringNum: nextRingNumber(ringLogs) }) });
     } catch (e) {
       console.error('Initial plan error:', e);
       return {
@@ -163,27 +95,19 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         violations: [],
         maxObservedLead: 0,
         maxDeviationMm: 0,
-        verdict: { status: 'OPTIMAL', message: 'พร้อมสำหรับการคำนวณ', advice: [] },
+        verdict: { status: 'UNKNOWN', message: 'ตรวจข้อมูลก่อนคำนวณ', advice: [] },
       };
     }
   });
 
   // Calculate Action Handler
   const handleCalculate = () => {
-    const res = runAdvancePlan({
-      sections,
-      verticalAlignment: vProfile,
-      startKey,
-      startHLead: Number(startHLead) || 0,
-      startVLead: Number(startVLead) || 0,
-      maxTolerance: Number(maxTolerance) || 55.0,
-      steeringSign,
-      ringLogs, // System 6: Pass ring logs for adaptive calibration
-    });
-    setPlanResult(res);
-    setIsCalculated(true);
-    setNeedsRecalc(false);
-    setScrubStep(1);
+    const errors = [...validatePlanningInput({ startKey, startHLead, startVLead, maxTolerance }), ...validateAlignment(sections, vProfile)];
+    if (errors.length) { setInputErrors(errors); setNeedsRecalc(true); return; }
+    try {
+      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startRingNumber: ringNumber({ringNum:nextRingNumber(ringLogs)}) });
+      setPlanResult(res); setIsCalculated(true); setNeedsRecalc(false); setScrubStep(1); setInputErrors([]);
+    } catch (error) { setInputErrors([error.message]); setNeedsRecalc(true); }
   };
 
   // Mark state as dirty on changes
@@ -212,7 +136,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   const handleAutoOptimizeRatio = (index) => {
     const sec = sections[index];
-    const bestRatio = findBestRatioForSection(sec, startKey, startHLead, startVLead, maxTolerance);
+    let bestRatio;
+    try { bestRatio = findBestRatioForSection(sec, startKey, startHLead, startVLead, maxTolerance, gapSettings); } catch(error) { setInputErrors([error.message]); return; }
     
     setSections((prev) => {
       const copy = JSON.parse(JSON.stringify(prev));
@@ -301,121 +226,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     }
   };
 
-  // Trajectory Chart Data
-  const chartData = useMemo(() => {
-    const labels = planResult.plannedRings.map((r) => `${r.ringNum} (${r.sta})`);
-    const hData = planResult.plannedRings.map((r) => r.afterH);
-    const vData = planResult.plannedRings.map((r) => r.afterV);
-    const reqData = planResult.plannedRings.map((r) => r.leadReq);
-    const topLimit = planResult.plannedRings.map(() => planResult.maxTolerance);
-    const botLimit = planResult.plannedRings.map(() => -planResult.maxTolerance);
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'Predicted H Lead (mm)',
-          data: hData,
-          borderColor: '#00d4ff',
-          backgroundColor: 'rgba(0, 212, 255, 0.1)',
-          tension: 0.2,
-          pointRadius: 2.5,
-          pointBackgroundColor: '#00d4ff',
-        },
-        {
-          label: 'Steering Lead Required (mm)',
-          data: reqData,
-          borderColor: '#ffab40',
-          borderDash: [5, 4],
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: false,
-        },
-        {
-          label: 'Predicted V Lead (mm)',
-          data: vData,
-          borderColor: '#a855f7',
-          borderWidth: 1.5,
-          pointRadius: 1.5,
-          pointBackgroundColor: '#a855f7',
-        },
-        {
-          label: `+${planResult.maxTolerance}mm Limit`,
-          data: topLimit,
-          borderColor: 'rgba(255, 82, 82, 0.4)',
-          borderDash: [3, 3],
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-        },
-        {
-          label: `-${planResult.maxTolerance}mm Limit`,
-          data: botLimit,
-          borderColor: 'rgba(255, 82, 82, 0.4)',
-          borderDash: [3, 3],
-          borderWidth: 1,
-          pointRadius: 0,
-          fill: false,
-        },
-      ],
-    };
-  }, [planResult]);
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: { color: '#e8eaf6', font: { family: 'JetBrains Mono', size: 10 } },
-      },
-      tooltip: {
-        backgroundColor: '#111827',
-        titleColor: '#00d4ff',
-        bodyColor: '#e8eaf6',
-        borderColor: 'rgba(255,255,255,0.1)',
-        borderWidth: 1,
-      },
-    },
-    scales: {
-      x: {
-        ticks: { color: '#8a94a6', font: { size: 9, family: 'JetBrains Mono' }, maxTicksLimit: 12 },
-        grid: { color: 'rgba(255,255,255,0.05)' },
-      },
-      y: {
-        ticks: { color: '#8a94a6', font: { size: 10, family: 'JetBrains Mono' } },
-        grid: { color: 'rgba(255,255,255,0.05)' },
-      },
-    },
-  };
-
   // Batch Save
-  const handleBatchSave = () => {
-    if (!isCalculated || needsRecalc) {
-      alert('Please click "Calculate / Simulate Plan" first before saving.');
-      return;
-    }
-
-    if (window.confirm(`Confirm batch saving all ${planResult.plannedRings.length} rings from Advance STA Plan into Ring Log history?`)) {
-      const records = planResult.plannedRings.map((r) => ({
-        ringNum: r.ringNum,
-        key: r.selectedKey,
-        hLead: r.afterH,
-        vLead: r.afterV,
-        gapT: r.gapT,
-        gapB: r.gapB,
-        gapL: r.gapL,
-        gapR: r.gapR,
-        roll: 0,
-        pitch: 0,
-        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        notes: r.notes,
-      }));
-
-      onBatchSave(records);
+  const handleBatchSave = async () => {
+    if (!isCalculated || needsRecalc || saving || !planResult.plannedRings.length) return;
+    setSaving(true);
+    try {
+      await onBatchSave(planResult.plannedRings.map(r=>({ ...r, key:r.selectedKey, hLead:r.afterH, vLead:r.afterV, recordType:'planned', timestamp:new Date().toISOString() })));
       setAppliedSuccess(true);
-      setTimeout(() => setAppliedSuccess(false), 3500);
-    }
+    } catch(error) { setInputErrors([error.message]); } finally { setSaving(false); }
   };
 
   // Export Plan to CSV
@@ -470,187 +288,46 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       r.gapB,
       r.riskIndex,
       r.articulationDeg,
-      `"${(r.aiReasoning || '').replace(/"/g, '""')}"`,
-      r.exceedsLimit ? `EXCEEDED by +${r.overLimitAmount}mm` : 'OK (<=55mm)',
+      r.aiReasoning || '',
+      r.exceedsLimit ? `EXCEEDED by +${r.overLimitAmount}mm` : `OK (<=${planResult.maxTolerance}mm)`,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `tbm_advance_plan_STA_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportCSV('tbm-advance-plan.csv', headers, rows);
   };
 
-  const verdict = planResult.verdict;
+  const summary = planResult.summary || summarizeRings(planResult.plannedRings, {...getLimits(gapSettings),lead:Number(maxTolerance)});
+  const selectedRing = planResult.plannedRings[scrubStep-1];
+  const tableRings = summary.assessed.filter(r => resultFilter==='all' || resultFilter==='issues' && r.level!=='normal' || r.issues.some(i=>i.code===resultFilter)).map(r=>r.ring);
+  const showIssues = filter => { setResultFilter(filter); setActiveSubTab('table'); };
+
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surf-2 border border-white/10 rounded-2xl p-6 shadow-xl">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center gap-1">
-              <Compass size={13} /> ADVANCE ALIGNMENT & 2D TRAJECTORY
-            </span>
-            <span className="text-xs text-text-muted">Dynamic Alignment &bull; Curve Steering &bull; 2D Visual Map</span>
-          </div>
-          <h2 className="text-2xl font-bold text-text tracking-tight">Station (STA.) Alignment & 2D Simulator</h2>
-          <p className="text-sm text-text-muted mt-1">
-            จัดการช่วง Alignment เพิ่ม/ลบได้อิสระ &bull; เลี้ยง Lead ติดลบในโค้งขวาเพื่อเลี้ยวเข้าโค้ง &bull; จำลองแผนที่ 2 มิติเทียบกับแนว DTA
-          </p>
-        </div>
-
-        {/* Big Action Button Bar */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleCalculate}
-            className={`btn px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg ${
-              needsRecalc
-                ? 'bg-amber-400 text-black shadow-amber-400/30 animate-pulse'
-                : 'bg-acc text-black shadow-cyan-400/25 hover:bg-cyan-300'
-            }`}
-          >
-            <Play size={16} />
-            <span>{needsRecalc ? '⚡ กดคำนวณใหม่ (Calculate)' : '⚡ คำนวณการวางแผน (Calculate)'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleBatchSave}
-            disabled={needsRecalc || !isCalculated}
-            className={`btn py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-              needsRecalc || !isCalculated
-                ? 'bg-surf-3 text-text-muted border border-white/5 cursor-not-allowed opacity-50'
-                : 'btn-yes shadow-lg shadow-emerald-900/30'
-            }`}
-          >
-            <Database size={15} />
-            <span>บันทึกเข้าระบบ ({planResult.plannedRings.length} ริง)</span>
-          </button>
-        </div>
-      </div>
-
+    <div className="stack pb-12">
+      <PageHeader eyebrow="Alignment planning · DTA simulator" title="วางแผนแนวอุโมงค์และตรวจ DTA" description="ดูสถานะทั้งแผน เลือกริงเพื่อตรวจรายละเอียด และแยกผลคาดการณ์ออกจากค่าตรวจสนาม" actions={<>
+        <button className="btn btn-acc" onClick={handleCalculate}>{needsRecalc?'คำนวณใหม่จากค่าที่แก้':'คำนวณแผน'}</button>
+        <button className="btn btn-outline" onClick={handleBatchSave} disabled={needsRecalc||saving||!planResult.plannedRings.length}>{saving?'กำลังบันทึก…':'เก็บเป็นแผนคาดการณ์'}</button>
+      </>}/>
+      <ValidationErrors errors={inputErrors}/>
+      {needsRecalc && <InsightPanel level="warning" title="ข้อมูลเปลี่ยนแล้ว ผลด้านล่างเป็นแผนก่อนแก้ไข"><p>คำนวณใหม่ก่อนส่งออกหรือบันทึกแผน</p></InsightPanel>}
       {appliedSuccess && (
         <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl text-sm font-medium">
           <CheckCircle2 size={18} />
-          <span>บันทึกข้อมูล {planResult.plannedRings.length} ริง เข้าสู่ประวัติ Ring Log เรียบร้อยแล้ว!</span>
+          <span>เก็บแผนคาดการณ์ {planResult.plannedRings.length} ริงแล้ว · แยกจากข้อมูลสนาม</span>
         </div>
       )}
 
-      {/* Feasibility Evaluator Verdict Banner */}
-      <div
-        className={`border rounded-2xl p-5 shadow-lg transition-all ${
-          verdict.status === 'OPTIMAL'
-            ? 'bg-emerald-500/10 border-emerald-500/30'
-            : verdict.status === 'WARNING'
-            ? 'bg-amber-500/10 border-amber-500/30'
-            : 'bg-rose-500/10 border-rose-500/30'
-        }`}
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div
-              className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                verdict.status === 'OPTIMAL'
-                  ? 'bg-emerald-500/20 text-emerald-400'
-                  : verdict.status === 'WARNING'
-                  ? 'bg-amber-500/20 text-amber-400'
-                  : 'bg-rose-500/20 text-rose-400'
-              }`}
-            >
-              {verdict.status === 'OPTIMAL' ? (
-                <CheckCircle2 size={24} />
-              ) : verdict.status === 'WARNING' ? (
-                <AlertTriangle size={24} />
-              ) : (
-                <ShieldAlert size={24} />
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-text-muted">
-                  Ratio & Steering Feasibility
-                </span>
-                <span
-                  className={`px-2.5 py-0.5 rounded text-xs font-bold ${
-                    verdict.status === 'OPTIMAL'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : verdict.status === 'WARNING'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                  }`}
-                >
-                  {verdict.status === 'OPTIMAL' ? '🟢 ใช้งานได้สมบูรณ์ (ไม่แหกโค้ง)' : verdict.status === 'WARNING' ? '🟡 มีคำเตือนบางจุด' : '🔴 อัตราส่วนนี้ไม่เหมาะสม'}
-                </span>
-              </div>
-              <h4 className="text-base font-bold text-text">{verdict.message}</h4>
-              {verdict.advice.map((adv, idx) => (
-                <p key={idx} className="text-xs text-text-muted flex items-center gap-1.5 pt-0.5">
-                  <ArrowRight size={13} className="text-acc shrink-0" />
-                  <span>{adv}</span>
-                </p>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 bg-surf-3/80 px-4 py-2.5 rounded-xl border border-white/10 shrink-0 font-mono text-xs">
-            <div>
-              <span className="text-xs text-text-muted uppercase block">Max Lead Seen</span>
-              <span
-                className={`text-lg font-bold ${
-                  planResult.maxObservedLead <= planResult.maxTolerance
-                    ? 'text-emerald-400'
-                    : 'text-rose-400'
-                }`}
-              >
-                {planResult.maxObservedLead} mm
-              </span>
-            </div>
-            <div className="border-l border-white/10 pl-3">
-              <span className="text-xs text-text-muted uppercase block">Max DTA Dev</span>
-              <span className="text-lg font-bold text-cyan-400">{planResult.maxDeviationMm} mm</span>
-            </div>
-            <div className="border-l border-white/10 pl-3">
-              <span className="text-xs text-text-muted uppercase block">Avg Risk Index</span>
-              <span
-                className={`text-lg font-bold ${
-                  (planResult.avgRiskIndex || 0) <= 25
-                    ? 'text-emerald-400'
-                    : (planResult.avgRiskIndex || 0) <= 50
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
-                }`}
-              >
-                {planResult.avgRiskIndex || 0}<span className="text-xs text-text-muted">/100</span>
-              </span>
-            </div>
-            <div className="border-l border-white/10 pl-3">
-              <span className="text-xs text-text-muted uppercase block">Max Artic Angle</span>
-              <span className="text-lg font-bold text-purple-400">{planResult.maxArticulationDeg || 0}&deg;</span>
-            </div>
-            <div className="border-l border-white/10 pl-3">
-              <span className="text-xs text-text-muted uppercase block">Violations (&gt;55mm)</span>
-              <span
-                className={`text-lg font-bold ${
-                  planResult.violationCount === 0 ? 'text-emerald-400' : 'text-amber-400'
-                }`}
-              >
-                {planResult.violationCount} ริง
-              </span>
-            </div>
-          </div>
-        </div>
+      <PlanInsight summary={summary} actions={<button className="btn btn-outline" onClick={()=>showIssues('issues')}>ตรวจริงที่มีข้อเตือน</button>}><p>ผลคาดการณ์จากแบบจำลอง · ข้อมูลสนามที่ใช้ปรับน้ำหนัก {planResult.aiWeights?.sampleSize||0} ริง · จำนวนข้อมูลไม่ใช่ความแม่นยำ</p></PlanInsight>
+      <div className="stat-grid">
+        <StatCard label="จำนวนริงในแผน" value={planResult.totalRings} unit="ริง"/>
+        <StatCard label="Lead เกินเกณฑ์" value={summary.leadCount} unit="ริง" detail={`เกณฑ์ ±${planResult.maxTolerance||maxTolerance} mm`} onClick={()=>showIssues('lead')}/>
+        <StatCard label="DTA นอกเกณฑ์" value={summary.dtaCount} unit="ริง" detail={`|Dev| สูงสุด ${summary.maxDeviation??'—'} mm`} onClick={()=>showIssues('dta')}/>
+        <StatCard label="Gap เตือนหรือวิกฤต" value={summary.gapCount} unit="ริง" detail={`ต่ำสุด ${summary.minGap??'—'} mm`} onClick={()=>showIssues('gap')}/>
       </div>
-
+      <div className="card form-grid"><Field label="วิธีเลือกคีย์"><select value={strategy} onChange={e=>{setStrategy(e.target.value);markDirty();}}><option value="senior_ai">มองล่วงหน้าและตรวจข้อจำกัด</option><option value="ratio_guided">เลือกตามสัดส่วน Ratio รายช่วง</option></select></Field><p className="section-note">Ratio เป็นสัดส่วนเป้าหมายในการจัดอันดับคีย์ · ตรวจยอดที่ทำได้จริงเทียบเป้าหมายหลังคำนวณ</p></div>
       {/* Running Ratio Summary */}
       {isCalculated && planResult.totalRings > 0 && (
         <div className="flex flex-wrap items-center gap-4 bg-surf-2 border border-white/10 rounded-2xl px-5 py-3 font-mono text-xs">
-          <span className="text-text-muted font-sans font-semibold">ผลลัพธ์จริง:</span>
+          <span className="text-text-muted font-sans font-semibold">สัดส่วนผลคาดการณ์:</span>
           <span className="text-text font-bold">{planResult.totalRings} ริง</span>
           <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 font-bold">UN: {planResult.counts.un} ({(planResult.counts.un / planResult.totalRings * 100).toFixed(1)}%)</span>
           <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 font-bold">RT: {planResult.counts.rt} ({(planResult.counts.rt / planResult.totalRings * 100).toFixed(1)}%)</span>
@@ -658,79 +335,15 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         </div>
       )}
 
-      {/* Global Parameters & Steering Convention Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-surf-2 border border-white/10 rounded-2xl p-4 shadow-md font-mono text-xs">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-text-muted font-sans font-semibold">1. Starting Key:</span>
-            <select
-              value={startKey}
-              onChange={(e) => { setStartKey(e.target.value); markDirty(); }}
-              className="bg-surf-3 border border-white/15 px-3 py-1.5 rounded-lg font-bold text-acc outline-none cursor-pointer"
-            >
-              {Object.keys(KEY_DATA).map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-text-muted font-sans font-semibold">2. Initial H/V Lead:</span>
-            <input
-              type="number"
-              step="0.1"
-              value={startHLead}
-              onChange={(e) => { setStartHLead(e.target.value); markDirty(); }}
-              className="w-16 bg-surf-3 border border-white/15 px-2 py-1.5 rounded-lg text-center font-bold text-text outline-none"
-              placeholder="H Lead"
-            />
-            <input
-              type="number"
-              step="0.1"
-              value={startVLead}
-              onChange={(e) => { setStartVLead(e.target.value); markDirty(); }}
-              className="w-16 bg-surf-3 border border-white/15 px-2 py-1.5 rounded-lg text-center font-bold text-text outline-none"
-              placeholder="V Lead"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-text-muted font-sans font-semibold">3. Lead Limit:</span>
-            <div className="flex items-center gap-1 bg-surf-3 border border-white/15 px-2.5 py-1.5 rounded-lg">
-              <span className="text-text-muted">&plusmn;</span>
-              <input
-                type="number"
-                value={maxTolerance}
-                onChange={(e) => { setMaxTolerance(Number(e.target.value)); markDirty(); }}
-                className="w-12 bg-transparent font-bold text-text outline-none text-center"
-              />
-              <span className="text-xs text-text-muted">mm</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
-            <span className="text-text-muted font-sans font-semibold">4. Steering Mode:</span>
-            <select
-              value={steeringSign}
-              onChange={(e) => { setSteeringSign(e.target.value); markDirty(); }}
-              className="bg-surf-3 border border-white/15 px-2.5 py-1.5 rounded-lg text-xs font-sans text-cyan-300 font-bold outline-none"
-            >
-              <option value="steering_bias">Active Steering (โค้งขวาเลี้ยงติดลบ ป้องกันแหกโค้ง)</option>
-              <option value="standard_positive">Standard Target (Right = +)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleResetSections}
-            className="btn btn-outline py-1.5 px-3 text-xs font-sans flex items-center gap-1.5 text-text-muted hover:text-white"
-          >
-            <RotateCcw size={13} /> รีเซ็ตช่วงตามแบบ Drawing
-          </button>
-        </div>
+      <div className="card form-grid">
+        <Field label="คีย์เริ่มต้น"><select value={startKey} onChange={e=>{setStartKey(e.target.value);markDirty();}}>{Object.keys(KEY_DATA).map(k=><option key={k}>{k}</option>)}</select></Field>
+        <Field label="H Lead เริ่มต้น (mm)"><input type="number" step="0.1" value={startHLead} onChange={e=>{setStartHLead(e.target.value);markDirty();}}/></Field>
+        <Field label="V Lead เริ่มต้น (mm)"><input type="number" step="0.1" value={startVLead} onChange={e=>{setStartVLead(e.target.value);markDirty();}}/></Field>
+        <Field label="Lead Limit ± (mm)"><input type="number" value={maxTolerance} onChange={e=>{setMaxTolerance(e.target.value);markDirty();}}/></Field>
+        <Field label="เป้าหมายการเลี้ยว"><select value={steeringSign} onChange={e=>{setSteeringSign(e.target.value);markDirty();}}><option value="steering_bias">เป้าหมายตรงข้าม Lead โค้ง</option><option value="standard_positive">เป้าหมายตาม Lead โค้ง</option></select></Field>
+        <div className="page-actions"><button className="btn btn-outline" onClick={handleResetSections}><RotateCcw size={16}/>ใช้ช่วงตาม Drawing</button></div>
       </div>
+      {!needsRecalc && planResult.ratioDiagnostics?.some(r=>!r.matches) && <InsightPanel level="warning" title="ยอดคีย์ที่เลือกยังไม่ตรง Ratio เป้าหมาย"><p>ลำดับคีย์และเกณฑ์ตรวจอาจทำให้ยอดจริงแตกต่างจากสัดส่วน · ตรวจรายการก่อนสั่งผลิต</p>{planResult.ratioDiagnostics.filter(r=>!r.matches).map(r=><p key={r.sectionCode}>{r.sectionCode}: เป้าหมาย U/R/L {r.expected.unCount}/{r.expected.rtCount}/{r.expected.ltCount} · ได้ {r.actual.un}/{r.actual.rt}/{r.actual.lt}</p>)}</InsightPanel>}
 
       {/* Dynamic Alignment Section Summary & Setting Ratio Switcher */}
       <div className="bg-surf-2 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
@@ -787,7 +400,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
               }`}>
                 {sec.isLocked !== false ? (
                   <>
-                    <Lock size={10} /> ล็อคยอด ({sec.ratio ? `${sec.ratio.un}:${sec.ratio.rt}:${sec.ratio.lt}` : '1:1:1'})
+                    <Lock size={10} /> Ratio เป้าหมาย ({sec.ratio ? `${sec.ratio.un}:${sec.ratio.rt}:${sec.ratio.lt}` : '1:1:1'})
                   </>
                 ) : (
                   <>
@@ -1096,7 +709,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                     onClick={() => handleAutoOptimizeRatio(idx)}
                     className="w-full mt-2 py-1.5 rounded bg-purple-500/20 text-purple-300 font-bold text-xs border border-purple-500/30 hover:bg-purple-500/30 flex justify-center items-center gap-1.5 transition-all"
                   >
-                    <Sparkles size={13} /> Auto-Optimize Ratio (ค้นหาอัตราส่วนที่ดีที่สุด)
+                    <Sparkles size={13} /> เปรียบเทียบและแนะนำ Ratio
                   </button>
                 </div>
               </div>
@@ -1110,7 +723,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       {/* Visual Simulation Display (Sub-tabs: 2D Map / Trajectory Chart / Sequence Table) */}
       <div className="card space-y-4 p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveSubTab('2d_map')}
@@ -1120,7 +733,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   : 'bg-surf-3 text-text-muted hover:text-white'
               }`}
             >
-              <Eye size={16} /> 2D Tunnel Visual Map (จำลองแนวขับเคลื่อน 2 มิติ)
+              <Eye size={16} /> แผนภาพแนวอุโมงค์
             </button>
 
             <button
@@ -1132,7 +745,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   : 'bg-surf-3 text-text-muted hover:text-white'
               }`}
             >
-              <TrendingUp size={16} /> Trajectory Chart (Lead vs STA)
+              <TrendingUp size={16} /> กราฟ Lead
             </button>
 
             <button
@@ -1144,13 +757,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   : 'bg-surf-3 text-text-muted hover:text-white'
               }`}
             >
-              <Layers size={16} /> Sequence Table ({planResult.plannedRings.length} Rings)
+              <Layers size={16} /> ตารางริง ({planResult.plannedRings.length})
             </button>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleExportCSV}
+              disabled={needsRecalc || !planResult.plannedRings.length}
               className="btn btn-outline py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 hover:border-acc"
             >
               <Download size={15} /> Export Plan (CSV)
@@ -1170,12 +784,12 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         {/* View 2: Trajectory Line Chart */}
         {activeSubTab === 'trajectory_chart' && (
           <div className="h-[320px] w-full pt-2">
-            <Line data={chartData} options={chartOptions} />
+            <LeadChart rings={planResult.plannedRings} limit={planResult.maxTolerance} theme={theme} onSelect={r=>setScrubStep(r.step)}/>
           </div>
         )}
 
         {/* View 3: Sequence Schedule Table */}
-        {activeSubTab === 'table' && (
+        {activeSubTab === 'table' && (<div><div className="tab-strip">{[['all','ทุกริง'],['issues','ต้องตรวจทาน'],['lead','Lead'],['dta','DTA'],['gap','Gap']].map(([value,label])=><button key={value} aria-pressed={resultFilter===value} onClick={()=>setResultFilter(value)}>{label}</button>)}</div>
           <div className="overflow-x-auto max-h-[500px]">
             <table className="w-full text-left text-xs border-collapse font-mono">
               <thead className="sticky top-0 z-10">
@@ -1195,7 +809,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {planResult.plannedRings.map((r) => {
+                {tableRings.map((r) => {
                   const riskColor = 
                     r.riskIndex <= 25 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
                     r.riskIndex <= 50 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
@@ -1211,7 +825,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                     >
                       <td className="p-2.5 text-text-muted font-bold">#{r.step}</td>
                       <td className="p-2.5 font-bold text-text">{r.sta}</td>
-                      <td className="p-2.5 font-bold text-acc">{r.ringNum}</td>
+                      <td className="p-2.5 font-bold text-acc"><button className="underline" onClick={()=>{setScrubStep(r.step);setActiveSubTab('2d_map');}}>{r.ringNum}</button></td>
                       <td className="p-2.5 text-text-muted font-bold">{r.sectionCode}</td>
                       <td className="p-2.5">
                         <span
@@ -1263,9 +877,10 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                 })}
               </tbody>
             </table>
-          </div>
+          </div></div>
         )}
       </div>
+      {selectedRing && <div className="two-columns"><InsightPanel level={assessRing(selectedRing,{...getLimits(gapSettings),lead:planResult.maxTolerance}).level} title={`${selectedRing.ringNum} · ${selectedRing.selectedKey} · STA ${selectedRing.sta}`}><p>{selectedRing.aiReasoning}</p><p>After H/V {selectedRing.afterH}/{selectedRing.afterV} mm · DTA {selectedRing.deviationMm} mm</p></InsightPanel><GapVisualizer gapT={selectedRing.gapT} gapB={selectedRing.gapB} gapL={selectedRing.gapL} gapR={selectedRing.gapR} warnThreshold={gapSettings.warnThreshold} blockThreshold={gapSettings.criticalThreshold}/></div>}
     </div>
   );
 }

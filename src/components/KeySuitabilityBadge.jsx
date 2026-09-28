@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
 
 export default function KeySuitabilityBadge({ suitability, showLabel = true, size = 'md' }) {
@@ -10,27 +10,27 @@ export default function KeySuitabilityBadge({ suitability, showLabel = true, siz
       border: 'border-emerald-500/30',
       text: 'text-emerald-400',
       icon: CheckCircle2,
-      label: 'Recommended (Yes)',
+      label: 'ผ่าน (Yes)',
       short: 'Yes',
-      desc: 'Ideal connection. Zero cross-joint interference.',
+      desc: 'ผ่านตาม Suitability Matrix ของโครงการ',
     },
     Fair: {
       bg: 'bg-amber-500/15',
       border: 'border-amber-500/30',
       text: 'text-amber-400',
       icon: AlertCircle,
-      label: 'Acceptable (Fair)',
+      label: 'ตรวจทาน (Fair)',
       short: 'Fair',
-      desc: 'Acceptable alignment with minor bolt offset.',
+      desc: 'ระดับ Fair ตามเมทริกซ์ ต้องตรวจทานก่อนเลือก',
     },
     No: {
       bg: 'bg-rose-500/15',
       border: 'border-rose-500/30',
       text: 'text-rose-400',
       icon: XCircle,
-      label: 'Restricted (No)',
+      label: 'ไม่ผ่าน (No)',
       short: 'No',
-      desc: 'Not recommended. Cross-joint overlap or bolt restriction.',
+      desc: 'ระดับ No ตามเมทริกซ์ ไม่ควรเลือกคีย์นี้',
     },
   };
 

@@ -1,37 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Cloud, 
-  CloudCheck, 
-  CloudOff, 
-  Database, 
-  Key, 
-  Link2, 
-  CheckCircle2, 
-  AlertTriangle, 
-  X, 
-  Copy, 
-  Check, 
-  ExternalLink, 
-  RotateCw, 
-  UploadCloud, 
-  DownloadCloud, 
-  Sparkles,
-  Info,
-  ShieldCheck,
-  Eye,
-  EyeOff
-} from 'lucide-react';
-import { 
-  getSupabaseConfig, 
-  saveSupabaseConfig, 
-  testSupabaseConnection 
+import { Dialog } from './PlannerUI';
+import { measuredLogs } from '../services/decisionSupport';
+import { useState } from 'react';
+import { Cloud, CloudCheck, CloudOff, Database, Link2, CheckCircle2, AlertTriangle, X, Copy, Check, ExternalLink, RotateCw, UploadCloud, DownloadCloud, Sparkles, Info, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  testSupabaseConnection
 } from '../services/supabaseClient';
-import { 
-  batchSaveRingLogsToCloud, 
-  saveAlignmentToCloud, 
-  fetchRingLogsFromCloud, 
-  fetchAlignmentFromCloud 
-} from '../services/supabaseService';
+import { batchSaveRingLogsToCloud, saveAlignmentToCloud, fetchRingLogsFromCloud } from '../services/supabaseService';
 
 export default function SupabaseModal({
   isOpen,
@@ -40,8 +16,8 @@ export default function SupabaseModal({
   onSyncRingLogs = () => {},
   onConnectionChange = () => {}
 }) {
-  const [url, setUrl] = useState('');
-  const [anonKey, setAnonKey] = useState('');
+  const [url, setUrl] = useState(() => getSupabaseConfig().url);
+  const [anonKey, setAnonKey] = useState(() => getSupabaseConfig().anonKey);
   const [showKey, setShowKey] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState('connect'); // 'connect' | 'sql' | 'guide'
 
@@ -49,17 +25,7 @@ export default function SupabaseModal({
   const [syncStatus, setSyncStatus] = useState(null); // { loading, success, message }
   const [isCopiedSQL, setIsCopiedSQL] = useState(false);
 
-  // Load existing credentials on open
-  useEffect(() => {
-    if (isOpen) {
-      const config = getSupabaseConfig();
-      setUrl(config.url);
-      setAnonKey(config.anonKey);
-      setTestStatus(null);
-      setSyncStatus(null);
-    }
-  }, [isOpen]);
-
+  const uploadRecords = measuredLogs(ringLogs);
   if (!isOpen) return null;
 
   const handleTestConnection = async () => {
@@ -116,12 +82,14 @@ export default function SupabaseModal({
       return;
     }
 
-    setSyncStatus({ loading: true, message: `กำลังอัปโหลด ${ringLogs.length} ริงขึ้น Cloud...` });
+    const savedConfig = getSupabaseConfig();
+    if(savedConfig.url !== url.trim() || savedConfig.anonKey !== anonKey.trim()) { setSyncStatus({success:false,message:'บันทึกและทดสอบการเชื่อมต่อก่อนอัปโหลด'}); return; }
+    setSyncStatus({ loading: true, message: `กำลังอัปโหลด ${uploadRecords.length} ริงขึ้น Cloud...` });
 
     try {
       // 1. Upload rings
-      if (ringLogs.length > 0) {
-        const ringRes = await batchSaveRingLogsToCloud(ringLogs);
+      if (uploadRecords.length > 0) {
+        const ringRes = await batchSaveRingLogsToCloud(uploadRecords);
         if (ringRes.error) throw new Error(ringRes.error);
       }
 
@@ -130,13 +98,13 @@ export default function SupabaseModal({
       const savedV = localStorage.getItem('tbm_vertical_alignment');
       const hData = savedH ? JSON.parse(savedH) : [];
       const vData = savedV ? JSON.parse(savedV) : [];
-      
+
       await saveAlignmentToCloud(hData, vData);
 
-      setSyncStatus({ 
-        loading: false, 
-        success: true, 
-        message: `อัปโหลด ${ringLogs.length} ริง และแนว Alignment ขึ้น Supabase Cloud สำเร็จเรียบร้อย!` 
+      setSyncStatus({
+        loading: false,
+        success: true,
+        message: `อัปโหลด ${uploadRecords.length} ริง และแนว Alignment ขึ้น Supabase Cloud สำเร็จเรียบร้อย!`
       });
     } catch (e) {
       setSyncStatus({ loading: false, success: false, message: `Upload Failed: ${e.message}` });
@@ -154,10 +122,10 @@ export default function SupabaseModal({
 
     if (res.data) {
       onSyncRingLogs(res.data);
-      setSyncStatus({ 
-        loading: false, 
-        success: true, 
-        message: `ดึงข้อมูลสำเร็จ! ซิงก์ประวัติ ${res.data.length} ริงจาก Cloud ลงเครื่องเรียบร้อย` 
+      setSyncStatus({
+        loading: false,
+        success: true,
+        message: `ดึงข้อมูลสำเร็จ! ซิงก์ประวัติ ${res.data.length} ริงจาก Cloud ลงเครื่องเรียบร้อย`
       });
     }
   };
@@ -272,9 +240,9 @@ CREATE POLICY "Allow public all consumables_logs" ON public.consumables_logs FOR
 -- 7. Enable Realtime Publications
 BEGIN;
   DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE 
-    public.ring_logs, 
-    public.horizontal_alignment, 
+  CREATE PUBLICATION supabase_realtime FOR TABLE
+    public.ring_logs,
+    public.horizontal_alignment,
     public.vertical_alignment;
 COMMIT;`;
 
@@ -288,7 +256,7 @@ COMMIT;`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-surf-2 border border-white/15 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans">
+      <Dialog label="ตั้งค่าฐานข้อมูล Cloud" onClose={onClose} busy={testStatus?.loading||syncStatus?.loading} className="bg-surf-2 border border-white/15 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10 bg-surf-3/60">
           <div className="flex items-center gap-3">
@@ -300,7 +268,7 @@ COMMIT;`;
                 <h3 className="text-base font-bold text-text">ตั้งค่าฐานข้อมูลออนไลน์ (Supabase Cloud)</h3>
                 {isConfigured ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Connected
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ตั้งค่าแล้ว
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-text-muted">
@@ -512,7 +480,7 @@ COMMIT;`;
                       </div>
                       <div>
                         <span className="font-bold text-text block text-xs">อัปโหลดข้อมูลขึ้น Cloud</span>
-                        <span className="text-[10px] text-text-muted block">ส่ง {ringLogs.length} ริง & Alignment ขึ้น Supabase</span>
+                        <span className="text-[10px] text-text-muted block">ส่งข้อมูลสนาม {uploadRecords.length} ริง & Alignment ขึ้น Supabase</span>
                       </div>
                     </button>
 
@@ -600,7 +568,7 @@ COMMIT;`;
             ปิดหน้าต่าง
           </button>
         </div>
-      </div>
+      </Dialog>
     </div>
   );
 }

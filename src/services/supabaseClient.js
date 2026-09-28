@@ -18,7 +18,7 @@ export function getSupabaseConfig() {
     const anonKey = (lsKey || envKey || '').trim();
 
     return { url, anonKey, isConfigured: Boolean(url && anonKey) };
-  } catch (e) {
+  } catch {
     return { url: '', anonKey: '', isConfigured: false };
   }
 }
@@ -97,7 +97,7 @@ export async function testSupabaseConnection(customUrl, customKey) {
 
   try {
     const testClient = createClient(url, anonKey);
-    const { data, error } = await testClient
+    const { error } = await testClient
       .from('ring_logs')
       .select('ring_number')
       .limit(1);

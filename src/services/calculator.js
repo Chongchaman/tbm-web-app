@@ -1,4 +1,6 @@
-import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX, TBM_SPECS } from '../data/tbmConstants.js';
+import { evaluateCandidates } from './smartCandidates.js';
+import { TBM_SPECS } from '../data/tbmConstants.js';
+import { finite, validateConditioning } from './decisionSupport.js';
 
 /**
  * Calculate Articulation Angle from Curve Radius
@@ -21,7 +23,8 @@ export function calculateCurveOffset(radius, width = 1400, dir = 'R') {
   }
   const factor = dir === 'R' ? 1 : -1;
   const hLead = Number(((6300 * width) / (radius * 1000) * factor).toFixed(2));
-  const vLead = Number(((-1 * 6300 * width) / (radius * 1000) * factor).toFixed(2));
+  // Horizontal curvature does not imply a vertical curve.
+  const vLead = 0;
   const articulation = Number(calculateArticulation(radius).toFixed(4));
   return { hLead, vLead, articulation };
 }
@@ -29,60 +32,8 @@ export function calculateCurveOffset(radius, width = 1400, dir = 'R') {
 /**
  * Calculate Candidate Next Keys with Lead sums, Suitability, Drift, and Ranking
  */
-export function calculateCandidates({
-  beforeKey = 'R13',
-  beforeHLead = 0,
-  beforeVLead = 0,
-  curveHLead = 0,
-  curveVLead = 0,
-  targetH = 0,
-  targetV = 0,
-}) {
-  const bKey = beforeKey || 'R13';
-  const candidateKeyList = NEXT_RING_TABLE[bKey] || Object.keys(KEY_DATA);
-  const beforePos = KEY_DATA[bKey]?.pos || parseInt(bKey.replace(/\D/g, '') || '1', 10);
-  const bH = Number(beforeHLead) || 0;
-  const bV = Number(beforeVLead) || 0;
-  const cH = Number(curveHLead) || 0;
-  const cV = Number(curveVLead) || 0;
-
-  const candidates = candidateKeyList.map((candKey) => {
-    const data = KEY_DATA[candKey] || { hLead: 0, vLead: 0, pos: 1, type: candKey.charAt(0) };
-    const candPos = data.pos;
-    
-    // Resulting lead: Segment Lead + Before Lead + Curve Lead
-    const afterHLead = Number((data.hLead + bH + cH).toFixed(2));
-    const afterVLead = Number((data.vLead + bV + cV).toFixed(2));
-
-    // Suitability check
-    const suitability = SUITABILITY_MATRIX[beforePos]?.[candPos] || 'Fair';
-
-    // Distance / Drift to target
-    const drift = Number(Math.hypot(afterHLead - targetH, afterVLead - targetV).toFixed(2));
-
-    // Score calculation (Lower drift and higher suitability = better rank)
-    let suitScore = suitability === 'Yes' ? 100 : suitability === 'Fair' ? 60 : 10;
-    const rankScore = Number((suitScore - drift * 0.5).toFixed(2));
-
-    return {
-      key: candKey,
-      type: data.type,
-      pos: candPos,
-      segHLead: data.hLead,
-      segVLead: data.vLead,
-      afterHLead,
-      afterVLead,
-      suitability,
-      drift,
-      rankScore,
-      angle: data.angle,
-    };
-  });
-
-  // Sort by rank score descending (Best recommendation first)
-  candidates.sort((a, b) => b.rankScore - a.rankScore);
-
-  return candidates;
+export function calculateCandidates(options = {}) {
+  return evaluateCandidates(options);
 }
 
 /**
@@ -137,6 +88,8 @@ export function calculateFoamConsumption({
   fir = 15.0,             // % (Foam Injection Ratio)
   fer = 8.0,              // times (Foam Expansion Ratio)
 }) {
+  const errors = validateConditioning({ tbmDia, segWidth, jackSpeed, foamDosage, earthPressure, atmPressure, fir, fer });
+  if (errors.length) throw new Error(errors.join(' · '));
   const sectionArea = (Math.PI * Math.pow(tbmDia / 1000, 2)) / 4;
   const soilPerRing = sectionArea * (segWidth / 1000);
   const excavationTime = segWidth / jackSpeed;
@@ -210,6 +163,7 @@ export function calculatePolymerConsumption({
   polymerSolutionInjection = 25.0, // % of excavated soil volume
   distance = 2.0,                // m
 }) {
+  if (![tbmDia,polymerDosage,polymerSolutionInjection,distance].every(finite) || tbmDia<=0 || polymerDosage<0 || polymerDosage>100 || polymerSolutionInjection<0 || distance<0) throw new Error('ข้อมูล Polymer ไม่ถูกต้อง');
   const sectionArea = (Math.PI * Math.pow(tbmDia / 1000, 2)) / 4;
   const soilVolumePerMeter = sectionArea;
   const polymerInjectionPerMeterM3 = soilVolumePerMeter * (polymerSolutionInjection / 100);

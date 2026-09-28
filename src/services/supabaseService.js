@@ -1,4 +1,5 @@
-import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
+import { getSupabaseClient } from './supabaseClient.js';
+import { recordKind, SEGMENT_WIDTHS } from './decisionSupport.js';
 
 /**
  * Convert frontend JS ring log object to Supabase database row format
@@ -16,26 +17,27 @@ export function formatRingToDbRow(ring) {
     section_code: ring.sectionCode || '',
     key_position: ring.key || ring.selectedKey || 'U4',
     prev_key: ring.prevKey || '',
-    segment_type: ring.type || ring.segmentType || 'U',
-    segment_size: Number(ring.size || ring.segmentSize || 1200),
-    h_lead: Number(ring.hLead || ring.segHLead || 0),
-    v_plumb: Number(ring.vLead || ring.vPlumb || ring.segVLead || 0),
+    segment_type: ring.type || ring.segmentType || (ring.key || ring.selectedKey || 'U4')[0],
+    segment_size: Number(ring.size ?? ring.segmentSize ?? SEGMENT_WIDTHS[(ring.key || ring.selectedKey || 'U4')[0]]),
+    h_lead: Number(ring.hLead ?? ring.afterH ?? ring.segHLead ?? 0),
+    v_plumb: Number(ring.vLead ?? ring.afterV ?? ring.vPlumb ?? ring.segVLead ?? 0),
     lead_req: Number(ring.leadReq || 0),
-    after_h: Number(ring.afterH || ring.hLead || 0),
-    after_v: Number(ring.afterV || ring.vLead || ring.vPlumb || 0),
-    deviation_mm: Number(ring.deviationMm || 0),
-    suitability: ring.suitability || 'Yes',
-    gap_top: Number(ring.gapT || ring.gapTop || 90),
-    gap_bottom: Number(ring.gapB || ring.gapBottom || 90),
-    gap_left: Number(ring.gapL || ring.gapLeft || 90),
-    gap_right: Number(ring.gapR || ring.gapRight || 90),
+    after_h: Number(ring.afterH ?? ring.hLead ?? 0),
+    after_v: Number(ring.afterV ?? ring.vLead ?? ring.vPlumb ?? 0),
+    deviation_mm: ring.deviationMm == null || ring.deviationMm === '' ? null : Number(ring.deviationMm),
+    suitability: ring.suitability || null,
+    gap_top: Number(ring.gapT ?? ring.gapTop ?? 50),
+    gap_bottom: Number(ring.gapB ?? ring.gapBottom ?? 50),
+    gap_left: Number(ring.gapL ?? ring.gapLeft ?? 50),
+    gap_right: Number(ring.gapR ?? ring.gapRight ?? 50),
     roll: Number(ring.roll || 0),
     pitch: Number(ring.pitch || 0),
     yaw: Number(ring.yaw || 0),
     thrust_force: Number(ring.thrustForce || 0),
     torque: Number(ring.torque || 0),
     operator_name: ring.operator || 'Chief Engineer',
-    notes: ring.notes || '',
+    notes: `[TBM:${recordKind(ring)}] ${String(ring.notes || '').replace(/^\[TBM:(measured|planned|sample|legacy)\]\s*/, '')}`,
+    excavation_date: ring.timestamp && Number.isFinite(Date.parse(ring.timestamp)) ? new Date(ring.timestamp).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -44,6 +46,9 @@ export function formatRingToDbRow(ring) {
  * Convert Supabase database row to frontend JS ring log object
  */
 export function formatDbRowToRing(row) {
+  const source = String(row.notes || '').match(/^\[TBM:(measured|planned|sample|legacy)\]/)?.[1];
+  const numeric = value => value == null || value === '' ? null : Number(value);
+  const h = numeric(row.h_lead), v = numeric(row.v_plumb);
   return {
     id: row.id,
     ringNumber: row.ring_number,
@@ -57,28 +62,29 @@ export function formatDbRowToRing(row) {
     prevKey: row.prev_key,
     type: row.segment_type,
     segmentType: row.segment_type,
-    size: Number(row.segment_size || 1200),
-    sizeM: (Number(row.segment_size || 1200) / 1000).toFixed(1),
-    hLead: Number(row.h_lead || 0),
-    vLead: Number(row.v_plumb || 0),
-    vPlumb: Number(row.v_plumb || 0),
+    size: Number(row.segment_size ?? SEGMENT_WIDTHS[row.key_position?.[0]]),
+    sizeM: (Number(row.segment_size ?? SEGMENT_WIDTHS[row.key_position?.[0]]) / 1000).toFixed(1),
+    hLead: h,
+    vLead: v,
+    vPlumb: v,
     leadReq: Number(row.lead_req || 0),
-    afterH: Number(row.after_h || row.h_lead || 0),
-    afterV: Number(row.after_v || row.v_plumb || 0),
-    deviationMm: Number(row.deviation_mm || 0),
-    suitability: row.suitability || 'Yes',
-    gapT: Number(row.gap_top || 90),
-    gapB: Number(row.gap_bottom || 90),
-    gapL: Number(row.gap_left || 90),
-    gapR: Number(row.gap_right || 90),
+    afterH: source === 'measured' ? h : numeric(row.after_h ?? row.h_lead),
+    afterV: source === 'measured' ? v : numeric(row.after_v ?? row.v_plumb),
+    deviationMm: row.deviation_mm == null ? null : Number(row.deviation_mm),
+    suitability: row.suitability || null,
+    gapT: row.gap_top == null ? null : Number(row.gap_top),
+    gapB: row.gap_bottom == null ? null : Number(row.gap_bottom),
+    gapL: row.gap_left == null ? null : Number(row.gap_left),
+    gapR: row.gap_right == null ? null : Number(row.gap_right),
     roll: Number(row.roll || 0),
     pitch: Number(row.pitch || 0),
     yaw: Number(row.yaw || 0),
     thrustForce: Number(row.thrust_force || 0),
     torque: Number(row.torque || 0),
     operator: row.operator_name || 'Chief Engineer',
-    notes: row.notes || '',
-    timestamp: row.created_at,
+    recordType: source,
+    notes: String(row.notes || '').replace(/^\[TBM:(measured|planned|sample|legacy)\]\s*/, ''),
+    timestamp: row.excavation_date || row.created_at,
   };
 }
 
@@ -224,6 +230,7 @@ export async function fetchAlignmentFromCloud() {
       client.from('vertical_alignment').select('*').order('sequence_order', { ascending: true }),
     ]);
 
+    if (hRes.error || vRes.error) throw hRes.error || vRes.error;
     let horizontal = null;
     if (hRes.data && hRes.data.length > 0) {
       horizontal = hRes.data.map(r => ({
@@ -288,7 +295,8 @@ export async function saveAlignmentToCloud(horizontalSections, verticalElements)
         updated_at: new Date().toISOString(),
       }));
 
-      await client.from('horizontal_alignment').upsert(hRows, { onConflict: 'id' });
+      const { error } = await client.from('horizontal_alignment').upsert(hRows, { onConflict: 'id' });
+      if (error) throw error;
     }
 
     if (verticalElements && verticalElements.length > 0) {
@@ -308,7 +316,8 @@ export async function saveAlignmentToCloud(horizontalSections, verticalElements)
         updated_at: new Date().toISOString(),
       }));
 
-      await client.from('vertical_alignment').upsert(vRows, { onConflict: 'id' });
+      const { error } = await client.from('vertical_alignment').upsert(vRows, { onConflict: 'id' });
+      if (error) throw error;
     }
 
     return { success: true, error: null };
@@ -321,7 +330,7 @@ export async function saveAlignmentToCloud(horizontalSections, verticalElements)
 /**
  * Subscribe to Real-time Ring Log changes (Live updates across all devices!)
  */
-export function subscribeToRealtimeRings(onInsert, onUpdate, onDelete) {
+export function subscribeToRealtimeRings(onInsert, onUpdate, onDelete, onStatus) {
   const client = getSupabaseClient();
   if (!client) return null;
 
@@ -349,7 +358,7 @@ export function subscribeToRealtimeRings(onInsert, onUpdate, onDelete) {
           if (onDelete && payload.old) onDelete(payload.old.ring_number);
         }
       )
-      .subscribe();
+      .subscribe(status => onStatus?.(status));
 
     return () => {
       client.removeChannel(channel);

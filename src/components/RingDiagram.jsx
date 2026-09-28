@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { KEY_DATA } from '../data/tbmConstants';
 
 export default function RingDiagram({
@@ -23,13 +23,12 @@ export default function RingDiagram({
 
   // Selected & Before Key details
   const selData = KEY_DATA[selectedKey] || { type: 'L', pos: 2, hLead: 0, vLead: 0 };
-  const beforeData = beforeKey ? KEY_DATA[beforeKey] : null;
 
   const currentDisplayKey = activeHover ? activeHover : selectedKey;
   const currentDisplayData = KEY_DATA[currentDisplayKey] || selData;
 
   const keyType = currentDisplayData.type || 'L';
-  const typeColor = keyType === 'R' ? '#ff5252' : keyType === 'L' ? '#00d4ff' : '#ffab40';
+  const typeColor = keyType === 'R' ? '#446fd7' : keyType === 'L' ? '#169296' : '#8a62c4';
   const typeName = keyType === 'R' ? 'Right Taper' : keyType === 'L' ? 'Left Taper' : 'Universal';
 
   // Helper angle calculations
@@ -55,7 +54,7 @@ export default function RingDiagram({
   return (
     <div className="flex flex-col items-center select-none">
       <div className="relative">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible" style={{maxWidth:"100%",height:"auto"}}>
           <defs>
             {/* Gradients */}
             <radialGradient id="ringGlow" cx="50%" cy="50%" r="50%">
@@ -82,16 +81,16 @@ export default function RingDiagram({
             cx={cx}
             cy={cy}
             r={outerR}
-            fill="#121a2c"
-            stroke="rgba(255,255,255,0.18)"
+            fill="var(--surf-3)"
+            stroke="var(--border)"
             strokeWidth="2"
           />
           <circle
             cx={cx}
             cy={cy}
             r={innerR}
-            fill="#0a0e1a"
-            stroke="rgba(255,255,255,0.15)"
+            fill="var(--surf)"
+            stroke="var(--border)"
             strokeWidth="1.5"
           />
 
@@ -111,7 +110,7 @@ export default function RingDiagram({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke="rgba(255,255,255,0.1)"
+                stroke="var(--border)"
                 strokeWidth="1"
                 strokeDasharray="2,2"
               />
@@ -119,8 +118,8 @@ export default function RingDiagram({
           })}
 
           {/* Cardinal Guidelines (0, 90, 180, 270 deg) */}
-          <line x1={cx} y1={cy - outerR - 8} x2={cx} y2={cy + outerR + 8} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-          <line x1={cx - outerR - 8} y1={cy} x2={cx + outerR + 8} y2={cy} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+          <line x1={cx} y1={cy - outerR - 8} x2={cx} y2={cy + outerR + 8} stroke="var(--border)" strokeWidth="1" />
+          <line x1={cx - outerR - 8} y1={cy} x2={cx + outerR + 8} y2={cy} stroke="var(--border)" strokeWidth="1" />
 
           {/* Roll Direction Arc Indicator if Roll != 0 */}
           {rollDeg !== 0 && (
@@ -157,7 +156,7 @@ export default function RingDiagram({
                 stroke={typeColor}
                 strokeWidth="2.5"
                 strokeLinecap="round"
-                filter="url(#glowEffect)"
+
               />
               <circle
                 cx={wedgeX}
@@ -259,7 +258,7 @@ export default function RingDiagram({
               fontWeight="800"
               fill={typeColor}
               fontFamily="monospace"
-              filter="url(#glowEffect)"
+
             >
               {currentDisplayKey}
             </text>
@@ -269,7 +268,7 @@ export default function RingDiagram({
               textAnchor="middle"
               fontSize="11"
               fontWeight="600"
-              fill="rgba(255,255,255,0.7)"
+              fill="var(--text-muted)"
               fontFamily="sans-serif"
             >
               {typeName}
@@ -279,7 +278,7 @@ export default function RingDiagram({
               y={cy + 24}
               textAnchor="middle"
               fontSize="9.5"
-              fill="rgba(255,255,255,0.4)"
+              fill="var(--text-muted)"
               fontFamily="monospace"
             >
               H: {currentDisplayData.hLead > 0 ? `+${currentDisplayData.hLead}` : currentDisplayData.hLead} | V: {currentDisplayData.vLead > 0 ? `+${currentDisplayData.vLead}` : currentDisplayData.vLead}

@@ -1,163 +1,35 @@
-import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConstants.js';
+import { evaluateCandidates } from './smartCandidates.js';
+import { validatePlanningInput, validateGapSettings, summarizeRings, getLimits, round } from './decisionSupport.js';
 
-/**
- * Calculate Lead Request according to project specification:
- * Lead request = 6300 * Segment Length / (Curve Radius * 1000)
- * Right curve (+) : Positive
- * Left curve (-)  : Negative
- * Straight (0)    : Zero
- */
-export function calculateLeadRequest({ alignmentType = 'straight', radius = 500, segWidth = 1400 }) {
-  if (alignmentType === 'straight' || !radius || radius <= 0) {
-    return 0;
-  }
-  const rawLead = (6300 * Number(segWidth)) / (Number(radius) * 1000);
-  if (alignmentType === 'right') {
-    return Number(rawLead.toFixed(2));
-  } else if (alignmentType === 'left') {
-    return Number((-1 * rawLead).toFixed(2));
-  }
-  return 0;
+export function calculateLeadRequest({alignmentType='straight',radius=500,segWidth=1400}) {
+  if(alignmentType==='straight' || Number(radius)<=0) return 0;
+  return round(6300*Number(segWidth)/(Number(radius)*1000)*(alignmentType==='right'?1:-1));
 }
 
-/**
- * Automated Multi-Ring Planning & Sequencing Engine
- */
-export function runAutoPlan({
-  startRingNum = 'R0016',
-  startKey = 'L2',
-  startHLead = 38.39,
-  startVLead = 32.47,
-  alignmentType = 'straight', // 'straight' | 'right' | 'left'
-  radius = 500,
-  segWidth = 1400,
-  ringCount = 10,
-  targetV = 0,
-}) {
-  const count = Math.max(1, Math.min(100, Number(ringCount) || 10));
-  const leadRequest = calculateLeadRequest({ alignmentType, radius, segWidth });
-
-  let currentKey = startKey || 'L2';
-  let currentH = Number(startHLead) || 0;
-  let currentV = Number(startVLead) || 0;
-  
-  // Extract numerical starting index from ring number (e.g. 'R0016' -> 16)
-  const matchNum = String(startRingNum).match(/\d+/);
-  let baseRingIndex = matchNum ? parseInt(matchNum[0], 10) : 16;
-  const numPrefix = String(startRingNum).replace(/\d+/, '') || 'R';
-  const numPadLen = matchNum ? matchNum[0].length : 4;
-
-  const plannedRings = [];
-
-  for (let step = 1; step <= count; step++) {
-    const ringNumberFormatted = `${numPrefix}${String(baseRingIndex + step - 1).padStart(numPadLen, '0')}`;
-    const beforePos = KEY_DATA[currentKey]?.pos || parseInt(currentKey.replace(/\D/g, '') || '1', 10);
-    const candidateKeys = NEXT_RING_TABLE[currentKey] || Object.keys(KEY_DATA);
-
-    // Evaluate all candidates
-    const scoredCandidates = candidateKeys.map((candKey) => {
-      const candData = KEY_DATA[candKey] || { hLead: 0, vLead: 0, pos: 1, type: candKey.charAt(0) };
-      const candPos = candData.pos;
-
-      // Resulting lead if this candidate is installed
-      const afterH = Number((candData.hLead + currentH + leadRequest).toFixed(2));
-      const afterV = Number((candData.vLead + currentV).toFixed(2));
-
-      // Suitability check from Matrix
-      const suitability = SUITABILITY_MATRIX[beforePos]?.[candPos] || 'Fair';
-
-      // Drift from target (Target H is 0 deviation from alignment lead request, Target V is targetV)
-      const driftH = afterH - leadRequest;
-      const driftV = afterV - targetV;
-      const totalDrift = Number(Math.hypot(driftH, driftV).toFixed(2));
-
-      // Scoring
-      let suitScore = suitability === 'Yes' ? 120 : suitability === 'Fair' ? 60 : -100;
-      
-      // Bonus for alternating ring type (R <-> L) to prevent roll & taper accumulation
-      const isCrossType = currentKey.charAt(0) !== candData.type && candData.type !== 'U';
-      const crossBonus = isCrossType ? 15 : 0;
-
-      const totalScore = Number((suitScore + crossBonus - totalDrift * 0.8).toFixed(2));
-
-      return {
-        key: candKey,
-        type: candData.type,
-        pos: candPos,
-        segHLead: candData.hLead,
-        segVLead: candData.vLead,
-        afterH,
-        afterV,
-        suitability,
-        totalDrift,
-        totalScore,
-      };
-    });
-
-    // Sort to find the best candidate
-    scoredCandidates.sort((a, b) => b.totalScore - a.totalScore);
-    const bestCand = scoredCandidates[0];
-
-    // Push into planned plan
-    plannedRings.push({
-      step,
-      ringNum: ringNumberFormatted,
-      prevKey: currentKey,
-      selectedKey: bestCand.key,
-      type: bestCand.type,
-      segHLead: bestCand.segHLead,
-      segVLead: bestCand.segVLead,
-      afterH: bestCand.afterH,
-      afterV: bestCand.afterV,
-      targetH: leadRequest,
-      targetV: targetV,
-      driftH: Number((bestCand.afterH - leadRequest).toFixed(2)),
-      driftV: Number((bestCand.afterV - targetV).toFixed(2)),
-      totalDrift: bestCand.totalDrift,
-      suitability: bestCand.suitability,
-      gapT: 90,
-      gapB: 90,
-      gapL: 90,
-      gapR: 90,
-      notes: `Auto Planned (Step ${step}) [Lead Req: ${leadRequest > 0 ? '+' : ''}${leadRequest} mm]`,
-    });
-
-    // Advance state to next iteration
-    currentKey = bestCand.key;
-    currentH = bestCand.afterH;
-    currentV = bestCand.afterV;
+export function runAutoPlan({startRingNum='R0016',startKey='L2',startHLead=38.39,startVLead=32.47,alignmentType='straight',radius=500,ringCount=10,targetV=0,leadLimit=55,gapSettings={initialGapTop:50,initialGapBottom:50,initialGapLeft:50,initialGapRight:50,warnThreshold:15,criticalThreshold:5},allowedTypes=['U','R','L'],lookaheadDepth=3}) {
+  const errors=[...validatePlanningInput({startKey,startHLead,startVLead,alignmentType,radius,ringCount,targetV,maxTolerance:leadLimit}),...validateGapSettings(gapSettings)];
+  if(!/^R?\d+$/i.test(String(startRingNum)) || Number(String(startRingNum).replace(/^R/i,''))<1) errors.push('หมายเลขริงเริ่มต้นไม่ถูกต้อง');
+  if(!Number.isInteger(Number(lookaheadDepth)) || Number(lookaheadDepth)<1 || Number(lookaheadDepth)>3) errors.push('จำนวนริงมองล่วงหน้าต้องเป็น 1–3');
+  if(!Array.isArray(allowedTypes) || !allowedTypes.length || allowedTypes.some(type=>!['U','R','L'].includes(type))) errors.push('ต้องอนุญาตเซ็กเมนต์อย่างน้อย 1 ชนิด');
+  if(errors.length) throw new Error(errors.join(' · '));
+  const count=Number(ringCount), start=Number(String(startRingNum).replace(/^R/i,''));
+  let currentKey=startKey,currentH=Number(startHLead),currentV=Number(startVLead);
+  const plannedRings=[];
+  for(let step=1;step<=count;step++) {
+    let beams=[{key:currentKey,h:currentH,v:currentV,cost:0,first:null}];
+    const depth=Math.min(3,Math.max(1,Number(lookaheadDepth)),count-step+1);
+    for(let d=0;d<depth;d++) {
+      const next=[];
+      for(const beam of beams) {
+        const candidates=evaluateCandidates({beforeKey:beam.key,beforeHLead:beam.h,beforeVLead:beam.v,alignmentType,radius,targetV,targetMode:'alignment',leadLimit,gapSettings,allowedTypes,lookahead:false});
+        for(const candidate of candidates) next.push({key:candidate.key,h:candidate.afterHLead,v:candidate.afterVLead,cost:beam.cost+candidate.cost,first:beam.first||candidate});
+      }
+      beams=next.sort((a,b)=>a.cost-b.cost).slice(0,6);
+      if(!beams.length) throw new Error(`ไม่มีคีย์ต่อเนื่องที่ใช้ได้ในริง ${step} ภายใต้ชนิดเซ็กเมนต์ที่อนุญาต`);
+    }
+    const best=beams[0].first;
+    plannedRings.push({...best,step,ringNum:`R${String(start+step-1).padStart(4,'0')}`,selectedKey:best.key,prevKey:currentKey,afterH:best.afterHLead,afterV:best.afterVLead,totalDrift:best.drift,driftH:round(best.afterHLead-best.targetH),driftV:round(best.afterVLead-Number(targetV)),recordType:'planned',notes:`Auto Planned (Step ${step}) · ${depth}-ring lookahead · ${best.reason}`});
+    currentKey=best.key;currentH=best.afterHLead;currentV=best.afterVLead;
   }
-
-  // Summary Metrics
-  let maxDrift = 0;
-  let sumDrift = 0;
-  let rCount = 0;
-  let lCount = 0;
-  let uCount = 0;
-
-  plannedRings.forEach((r) => {
-    if (r.totalDrift > maxDrift) maxDrift = r.totalDrift;
-    sumDrift += r.totalDrift;
-    if (r.type === 'R') rCount++;
-    else if (r.type === 'L') lCount++;
-    else if (r.type === 'U') uCount++;
-  });
-
-  const avgDrift = Number((sumDrift / count).toFixed(2));
-  const totalDistanceM = Number(((count * Number(segWidth)) / 1000).toFixed(1));
-
-  return {
-    leadRequest,
-    alignmentType,
-    radius: Number(radius),
-    segWidth: Number(segWidth),
-    ringCount: count,
-    totalDistanceM,
-    maxDrift,
-    avgDrift,
-    rCount,
-    lCount,
-    uCount,
-    plannedRings,
-  };
+  return {plannedRings,ringCount:count,alignmentType,radius:Number(radius),leadRequest:calculateLeadRequest({alignmentType,radius,segWidth:1400}),totalDistanceM:round(plannedRings.reduce((sum,r)=>sum+r.sizeM,0)),maxDrift:Math.max(...plannedRings.map(r=>r.totalDrift)),avgDrift:round(plannedRings.reduce((sum,r)=>sum+r.totalDrift,0)/count),rCount:plannedRings.filter(r=>r.type==='R').length,lCount:plannedRings.filter(r=>r.type==='L').length,uCount:plannedRings.filter(r=>r.type==='U').length,summary:summarizeRings(plannedRings,{...getLimits(gapSettings),lead:Number(leadLimit)})};
 }

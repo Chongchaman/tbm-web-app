@@ -1,24 +1,5 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import {
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Minimize2,
-  RotateCcw,
-  Layers,
-  Eye,
-  Sliders,
-  Play,
-  Pause,
-  ChevronLeft,
-  ChevronRight,
-  Compass,
-  Info,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Move
-} from 'lucide-react';
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Layers, Sliders, Play, Pause, ChevronLeft, ChevronRight, Compass, Move } from 'lucide-react';
 import KeySuitabilityBadge from './KeySuitabilityBadge';
 
 /**
@@ -64,7 +45,7 @@ export default function Tunnel2DVisualizer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [hoveredRing, setHoveredRing] = useState(null);
 
-  const rings = planResult?.plannedRings || [];
+  const rings = useMemo(() => planResult?.plannedRings || [], [planResult]);
   const totalRings = rings.length;
   const currentRing = rings[scrubStep - 1] || rings[0] || {};
 
@@ -509,7 +490,7 @@ export default function Tunnel2DVisualizer({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className={`w-full bg-surf-3/95 rounded-2xl border border-white/10 relative overflow-hidden select-none transition-all shadow-inner ${
+        className={`cad-canvas w-full bg-surf-3/95 rounded-2xl border border-white/10 relative overflow-hidden select-none transition-all shadow-inner ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         style={{ height: `${canvasH}px` }}

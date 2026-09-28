@@ -9,13 +9,10 @@
 /**
  * AI Confidence Level based on ring log count
  */
+import { measuredLogs, ringNumber } from './decisionSupport.js';
+
 export function getAIConfidenceLevel(ringCount) {
-  if (ringCount >= 500) return { level: 'master', label: '🏆 Master (500+ ริง)', pct: 100, color: '#10b981' };
-  if (ringCount >= 200) return { level: 'expert', label: '🧠 Expert (200+ ริง)', pct: 85, color: '#06b6d4' };
-  if (ringCount >= 100) return { level: 'proficient', label: '📈 Proficient (100+ ริง)', pct: 70, color: '#8b5cf6' };
-  if (ringCount >= 50)  return { level: 'intermediate', label: '📊 Intermediate (50+ ริง)', pct: 55, color: '#f59e0b' };
-  if (ringCount >= 10)  return { level: 'novice', label: '🌱 Novice (10+ ริง)', pct: 30, color: '#ef4444' };
-  return { level: 'untrained', label: '⚪ ยังไม่มีข้อมูล', pct: 10, color: '#6b7280' };
+  return { level: ringCount>=10?'available':'limited', label:`ข้อมูลสนาม ${ringCount} ริง · จำนวนข้อมูลไม่ใช่ความแม่นยำ`, pct:Math.min(100,Math.round(ringCount/3)),color:'#86b8ff' };
 }
 
 /**
@@ -43,6 +40,7 @@ export const DEFAULT_AI_WEIGHTS = {
  * Analyze ring log data and produce calibrated weights
  */
 export function calibrateFromRingLogs(ringLogs = []) {
+  ringLogs = measuredLogs(ringLogs).sort((a,b)=>ringNumber(a)-ringNumber(b));
   if (!ringLogs || ringLogs.length < 10) {
     return { ...DEFAULT_AI_WEIGHTS, calibrated: false, sampleSize: ringLogs?.length || 0 };
   }

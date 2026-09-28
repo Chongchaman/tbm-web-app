@@ -1,5 +1,6 @@
+import { validateAlignment, validateGapSettings, validatePlanningInput, summarizeRings, getLimits } from './decisionSupport.js';
 import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConstants.js';
-import { DEFAULT_AI_WEIGHTS, getAdaptiveWeights } from './aiCalibrator.js';
+import { getAdaptiveWeights } from './aiCalibrator.js';
 
 /**
  * ============================================================================
@@ -130,9 +131,13 @@ export function computeRatioBreakdown(ratio, totalRings) {
   const unPct = Number(((un / sum) * 100).toFixed(1));
   const rtPct = Number(((rt / sum) * 100).toFixed(1));
   const ltPct = Number(((lt / sum) * 100).toFixed(1));
-  const unCount = Math.round((un / sum) * totalRings);
-  const rtCount = Math.round((rt / sum) * totalRings);
-  const ltCount = Math.max(0, totalRings - unCount - rtCount);
+  const count = Math.max(0, Math.floor(Number(totalRings)));
+  const raw = [un, rt, lt].map(value => value / sum * count);
+  const allocation = raw.map(Math.floor);
+  const order = raw.map((value, index) => ({ index, remainder: value - allocation[index] })).sort((a,b) => b.remainder-a.remainder || a.index-b.index);
+  const remainderCount = count-allocation.reduce((a,b)=>a+b,0);
+  for (let i=0; i<remainderCount; i++) allocation[order[i].index]++;
+  const [unCount, rtCount, ltCount] = allocation;
   return { ratioStr: `${un}:${rt}:${lt}`, unPct, rtPct, ltPct, unCount, rtCount, ltCount };
 }
 
@@ -152,10 +157,12 @@ export function findBestRatioForSection(section, startKey = 'U4', startH = -20, 
   if (cands.length === 0) return { un: allowU ? 1 : 0, rt: allowR ? 1 : 0, lt: allowL ? 1 : 0 };
   let best = cands[0], bestScore = Infinity;
   for (const ratio of cands) {
-    const res = runAdvancePlan({ sections: [{ ...section, ratio, allowedTypes: allowed }], startKey, startHLead: startH, startVLead: startV, maxTolerance: limit, startRingNumber: 1, gapSettings, strategy: 'ratio_guided' });
-    const score = res.violationCount * 1000 + res.gapWarningCount * 500 + res.maxObservedLead;
+    let res;
+    try { res = runAdvancePlan({ sections: [{ ...section, ratio, allowedTypes: allowed }], startKey, startHLead: startH, startVLead: startV, maxTolerance: limit, startRingNumber: 1, gapSettings, strategy: 'ratio_guided' }); } catch { continue; }
+    const score = res.summary.critical.length * 100000 + res.summary.warnings.length * 1000 + Math.abs(res.maxDeviationMm) + res.maxObservedLead;
     if (score < bestScore) { bestScore = score; best = ratio; }
   }
+  if (!Number.isFinite(bestScore)) throw new Error('ไม่มีลำดับคีย์ที่ต่อเนื่องได้ภายใต้ชนิดเซ็กเมนต์ที่อนุญาต');
   return best;
 }
 
@@ -176,6 +183,7 @@ function beamSearchSelect(state, availableCandidates, scoreFn, simFn, depth, wid
   for (let d = 1; d < depth; d++) {
     let nextBeams = [];
     for (const beam of beams) {
+      if (beam.lastState.coveredDistance >= beam.lastState.totalDistance) { nextBeams.push(beam); continue; }
       const nextCands = getFilteredCandidates(beam.lastState.currentKey, beam.lastState.allowedTypes);
       for (const candKey of nextCands) {
         const { score, result } = scoreFn(beam.lastState, candKey);
@@ -186,6 +194,7 @@ function beamSearchSelect(state, availableCandidates, scoreFn, simFn, depth, wid
         });
       }
     }
+    if (!nextBeams.length) break;
     nextBeams.sort((a, b) => b.score - a.score);
     beams = nextBeams.slice(0, width);
   }
@@ -194,11 +203,7 @@ function beamSearchSelect(state, availableCandidates, scoreFn, simFn, depth, wid
 }
 
 function getFilteredCandidates(currentKey, allowedTypes) {
-  let cands = (NEXT_RING_TABLE[currentKey] || Object.keys(KEY_DATA))
-    .filter(k => allowedTypes.includes(KEY_DATA[k]?.type || k.charAt(0)));
-  if (cands.length === 0) cands = Object.keys(KEY_DATA).filter(k => allowedTypes.includes(KEY_DATA[k]?.type || k.charAt(0)));
-  if (cands.length === 0) cands = NEXT_RING_TABLE[currentKey] || Object.keys(KEY_DATA);
-  return cands;
+  return (NEXT_RING_TABLE[currentKey] || []).filter(k => allowedTypes.includes(KEY_DATA[k].type));
 }
 
 // ============================================================================
@@ -241,14 +246,14 @@ function generateAIReasoning(chosen, dynamicTargetH, curDevMm, driftTrend, artic
     const dir = curDevMm > 0 ? 'ขวา' : 'ซ้าย';
     reasons.push(`แก้ไข Deviation ${Math.abs(curDevMm).toFixed(0)}mm (เบน${dir})`);
   } else {
-    reasons.push(`เกาะแนว DTA แม่นยำ (Dev ${Math.abs(curDevMm).toFixed(0)}mm)`);
+    reasons.push(`DTA คาดการณ์ (Dev ${Math.abs(curDevMm).toFixed(0)}mm)`);
   }
 
   // Gap reason
   if (chosen.minGap < 15) {
     reasons.push(`⚠️ คลายแรงเลี้ยว ป้องกัน Gap แคบ (${chosen.minGap.toFixed(0)}mm)`);
   } else if (chosen.minGap > 35) {
-    reasons.push(`Gap ปลอดภัย (${chosen.minGap.toFixed(0)}mm)`);
+    reasons.push(`Gap คาดการณ์อยู่ในเกณฑ์ (${chosen.minGap.toFixed(0)}mm)`);
   }
 
   // Drift trend reason
@@ -283,10 +288,15 @@ export function runAdvancePlan({
   maxTolerance = 55.0,
   startRingNumber = 1,
   strategy = 'senior_ai',
+  steeringSign = 'steering_bias',
   gapSettings = DEFAULT_GAP_SETTINGS,
   ringLogs = [],
 }) {
-  const limit = Math.abs(Number(maxTolerance)) || 55.0;
+  const inputErrors = [...validatePlanningInput({ startKey, startHLead, startVLead, maxTolerance }), ...validateAlignment(sections, verticalAlignment), ...validateGapSettings(gapSettings)];
+  if (!Number.isSafeInteger(Number(startRingNumber)) || Number(startRingNumber)<1) inputErrors.push('หมายเลขริงเริ่มต้นต้องเป็นจำนวนเต็มมากกว่า 0');
+  if (!['senior_ai','ratio_guided'].includes(strategy)) inputErrors.push('วิธีเลือกคีย์ไม่ถูกต้อง');
+  if (inputErrors.length) throw new Error(inputErrors.join(' · '));
+  const limit = Number(maxTolerance);
   let currentKey = startKey || 'U4';
   let currentH = Number(startHLead); if (isNaN(currentH)) currentH = -20.0;
   let currentV = Number(startVLead); if (isNaN(currentV)) currentV = -10.0;
@@ -295,12 +305,12 @@ export function runAdvancePlan({
   const W = getAdaptiveWeights(ringLogs);
 
   const gConfig = { ...DEFAULT_GAP_SETTINGS, ...(gapSettings || {}) };
-  const initGapT = Number(gConfig.initialGapTop) || 50.0;
-  const initGapB = Number(gConfig.initialGapBottom) || 50.0;
-  const initGapL = Number(gConfig.initialGapLeft) || 50.0;
-  const initGapR = Number(gConfig.initialGapRight) || 50.0;
-  const warnGapLimit = Number(gConfig.warnThreshold) || 15.0;
-  const critGapLimit = Number(gConfig.criticalThreshold) || 5.0;
+  const initGapT = Number(gConfig.initialGapTop);
+  const initGapB = Number(gConfig.initialGapBottom);
+  const initGapL = Number(gConfig.initialGapLeft);
+  const initGapR = Number(gConfig.initialGapRight);
+  const warnGapLimit = Number(gConfig.warnThreshold);
+  const critGapLimit = Number(gConfig.criticalThreshold);
 
   const allPlannedRings = [];
   const violations = [];
@@ -345,7 +355,7 @@ export function runAdvancePlan({
     if (nextSec && nextSec.radius > 0 && nextSec.direction !== 'straight' && nextSec.sectionType !== 'tangent') {
       const nextSign = nextSec.direction === 'right' ? 1 : -1;
       const nextFullLead = (6300 * 1300) / (nextSec.radius * 1000) * nextSign;
-      nextSecLeadTarget = -0.72 * nextFullLead;
+      nextSecLeadTarget = steeringSign === 'standard_positive' ? nextFullLead : -0.72 * nextFullLead;
     } else if (nextSec) {
       nextSecLeadTarget = 0;
     }
@@ -355,13 +365,14 @@ export function runAdvancePlan({
     let coveredDistance = 0;
     let currentSTAMeters = startMeters;
 
-    while (coveredDistance < totalDistance - 0.01 && sectionRingIndex < 500) {
+    while (coveredDistance < totalDistance - 0.01 && sectionRingIndex < 13000) {
       globalRingIndex++;
       sectionRingIndex++;
       const ringNumFormatted = `R${String(currentRingNumber).padStart(4, '0')}`;
       const beforePos = KEY_DATA[currentKey]?.pos || parseInt(currentKey.replace(/\D/g, '') || '1', 10);
 
       const availableCandidates = getFilteredCandidates(currentKey, allowedTypes);
+      if (!availableCandidates.length) throw new Error(`ช่วง ${sec.code}: ไม่มีคีย์ต่อเนื่องที่ใช้ได้`);
       const distanceProgress = Math.min(1.0, coveredDistance / totalDistance);
       const distanceRemaining = totalDistance - coveredDistance;
 
@@ -395,7 +406,7 @@ export function runAdvancePlan({
         dtaX, dtaY, dtaTheta, tbmX, tbmY, tbmTheta, prevTbmTheta,
         curDevMm, headError, driftTrend, distanceProgress, distanceRemaining,
         sec, matchingVElem, allowedTypes,
-        totalSoFar, currentUnPct, currentRtPct, currentLtPct,
+        sectionUsed: { ...sectionUsed }, totalSoFar, currentUnPct, currentRtPct, currentLtPct,
         targetUnPct, targetRtPct, targetLtPct,
         enforceRatioForThisSec, isSectionLocked,
         transitionBlendInfo,
@@ -428,15 +439,15 @@ export function runAdvancePlan({
         const gapT = Math.max(0, Math.min(100, Number((state.initGapT - 0.30 * afterV).toFixed(1))));
         const gapB = Math.max(0, Math.min(100, Number((state.initGapB + 0.30 * afterV).toFixed(1))));
         const minGap = Math.min(gapL, gapR, gapT, gapB);
-        const isGapWarn = minGap < state.warnGapLimit;
-        const isGapCrit = minGap < state.critGapLimit;
+        const isGapWarn = minGap <= state.warnGapLimit;
+        const isGapCrit = minGap <= state.critGapLimit;
 
         let suitScore = suitability === 'Yes' ? state.W.suitYes : suitability === 'Fair' ? state.W.suitFair : state.W.suitNo;
 
         // Dynamic target with PD control
         let baseTargetH = 0;
         if ((state.sec.direction === 'right' && leadReq > 0) || (state.sec.direction === 'left' && leadReq < 0)) {
-          baseTargetH = -0.72 * leadReq;
+          baseTargetH = steeringSign === 'standard_positive' ? leadReq : -0.72 * leadReq;
         }
 
         // System 2: Adaptive PD gain based on drift trend
@@ -464,7 +475,7 @@ export function runAdvancePlan({
         const hScore = 320 - Math.pow(Math.abs(afterH - dynamicTargetH), 1.35) * (state.W.hScoreCoeff * 1.5);
         const vScore = 160 - Math.pow(Math.abs(afterV), 1.2) * state.W.vScoreCoeff;
 
-        let gapScore = 0;
+        let gapScore;
         if (isGapCrit) gapScore = state.W.gapCriticalPenalty;
         else if (isGapWarn) gapScore = state.W.gapWarnPenalty - (state.warnGapLimit - minGap) * 120;
         else if (minGap < 25) gapScore = -(25 - minGap) * 15;
@@ -473,7 +484,7 @@ export function runAdvancePlan({
         // System 3: Articulation angle penalty
         const candTbmTurn = (-1 * candData.hLead) / TBM_DIAMETER_MM;
         const newTbmTheta = state.tbmTheta + candTbmTurn;
-        const articulationRad = Math.abs(newTbmTheta - state.prevTbmTheta);
+        const articulationRad = Math.abs(newTbmTheta - state.tbmTheta);
         const articulationDeg = articulationRad * (180 / Math.PI);
         let articulationPenalty = 0;
         if (articulationDeg > state.W.articulationHardLimit) {
@@ -496,8 +507,11 @@ export function runAdvancePlan({
         const overshootPenalty = wouldOvershoot ? 350 : 0;
 
         // Explicit DTA centerline alignment penalty
-        const devAlignmentPenalty = Math.abs(state.curDevMm) * 3.5;
-        const totalScore = Number((suitScore + hScore + vScore + gapScore + ratioScore + articulationPenalty - devAlignmentPenalty - limitPenalty - overshootPenalty).toFixed(2));
+        const projected = simFn(state, { key:candKey, size:candSize, newTbmTheta, afterH, afterV });
+        const predictedDeviationMm = projected.curDevMm;
+        const devAlignmentPenalty = Math.abs(predictedDeviationMm) * 3.5 + Math.max(0, Math.abs(predictedDeviationMm)-75) * 20;
+        const hardPenalty = (suitability === 'No' ? 100000 : 0) + (isGapCrit ? 100000 : 0);
+        const totalScore = Number((suitScore + hScore + vScore + gapScore + ratioScore + articulationPenalty - devAlignmentPenalty - limitPenalty - overshootPenalty - hardPenalty).toFixed(2));
 
         return {
           score: totalScore,
@@ -509,7 +523,7 @@ export function runAdvancePlan({
             gapL, gapR, gapT, gapB, minGap, isGapWarn, isGapCrit,
             totalScore, wouldOvershoot, dynamicTargetH,
             articulationDeg: Number(articulationDeg.toFixed(3)),
-            candTbmTurn, newTbmTheta,
+            candTbmTurn, newTbmTheta, predictedDeviationMm,
           }
         };
       };
@@ -533,8 +547,13 @@ export function runAdvancePlan({
         const nextCurDevMm = Number((((nextTbmX - nextDtaX) * Math.cos(nextDtaTheta) - (nextTbmY - nextDtaY) * Math.sin(nextDtaTheta)) * 1000).toFixed(1));
         const nextHeadError = result.newTbmTheta - nextDtaTheta;
 
+        const nextUsed = { ...state.sectionUsed };
+        nextUsed[KEY_DATA[result.key].type]++;
+        const nextTotal = state.totalSoFar + 1;
         return {
-          ...state,
+          ...state, sectionUsed: nextUsed, totalSoFar: nextTotal,
+          currentUnPct: nextUsed.U / nextTotal, currentRtPct: nextUsed.R / nextTotal, currentLtPct: nextUsed.L / nextTotal,
+          distanceRemaining: Math.max(0, state.totalDistance - state.coveredDistance - ringDistM),
           currentKey: result.key,
           currentH: result.afterH,
           currentV: result.afterV,
@@ -555,7 +574,7 @@ export function runAdvancePlan({
 
       // System 1: Use Beam Search in senior_ai mode (unlocked sections)
       let chosen;
-      const useBeamSearch = isSeniorAIMode && !isSectionLocked && W.beamSearchDepth > 1;
+      const useBeamSearch = isSeniorAIMode && W.beamSearchDepth > 1;
 
       if (useBeamSearch && availableCandidates.length > 1) {
         const bestKey = beamSearchSelect(scoringState, availableCandidates, scoreFn, simFn, W.beamSearchDepth, W.beamSearchWidth);
@@ -581,32 +600,19 @@ export function runAdvancePlan({
       const ringDistM = chosen.size / 1000;
       const prevDtaX = dtaX, prevDtaY = dtaY, prevTbmX = tbmX, prevTbmY = tbmY;
 
-      // DTA kinematics
-      let dtaCurvature = 0;
-      if (sec.direction !== 'straight' && sec.sectionType !== 'tangent' && sec.radius > 0) {
-        const signDir = sec.direction === 'right' ? 1 : -1;
-        if (sec.sectionType === 'full_curve') dtaCurvature = (1 / sec.radius) * signDir;
-        else if (sec.sectionType === 'transition_in') dtaCurvature = (distanceProgress / sec.radius) * signDir;
-        else if (sec.sectionType === 'transition_out') dtaCurvature = ((1 - distanceProgress) / sec.radius) * signDir;
-      }
-      dtaTheta += dtaCurvature * ringDistM;
-      dtaX += ringDistM * Math.sin(dtaTheta);
-      dtaY += ringDistM * Math.cos(dtaTheta);
-
-      // TBM kinematics
+      // Use the same propagation for ranking, lookahead and displayed trajectory.
+      const projected = simFn(scoringState, chosen);
       prevTbmTheta = tbmTheta;
-      tbmTheta = chosen.newTbmTheta;
-      tbmX += ringDistM * Math.sin(tbmTheta);
-      tbmY += ringDistM * Math.cos(tbmTheta);
+      ({ dtaTheta, dtaX, dtaY, tbmTheta, tbmX, tbmY } = projected);
 
       const deviationMm = Number((((tbmX - dtaX) * Math.cos(dtaTheta) - (tbmY - dtaY) * Math.sin(dtaTheta)) * 1000).toFixed(1));
 
       // System 4: Risk score and AI reasoning
       const riskIndex = computeRiskIndex(chosen.afterH, chosen.afterV, chosen.minGap, deviationMm, chosen.articulationDeg, limit);
-      const aiReasoning = generateAIReasoning(chosen, chosen.dynamicTargetH, curDevMm, driftTrend, chosen.articulationDeg, transitionBlendInfo?.nextSecName || null);
+      const aiReasoning = generateAIReasoning(chosen, chosen.dynamicTargetH, deviationMm, driftTrend, chosen.articulationDeg, transitionBlendInfo?.nextSecName || null);
 
       allPlannedRings.push({
-        step: globalRingIndex, ringNum: ringNumFormatted, ringNumInt: currentRingNumber,
+        recordType: 'planned', step: globalRingIndex, ringNum: ringNumFormatted, ringNumInt: currentRingNumber,
         sta: currentRingSTA, dist: Number(coveredDistance.toFixed(1)),
         sectionCode: sec.code, sectionName: sec.name, sectionType: sec.sectionType,
         prevKey: currentKey, selectedKey: chosen.key,
@@ -625,7 +631,7 @@ export function runAdvancePlan({
         dtaTheta: Number(dtaTheta.toFixed(4)),
         dtaX: Number(dtaX.toFixed(3)), dtaY: Number(dtaY.toFixed(3)),
         tbmX: Number(tbmX.toFixed(3)), tbmY: Number(tbmY.toFixed(3)),
-        deviationMm,
+        deviationMm, predictedDeviationMm: chosen.predictedDeviationMm,
         // v2.0 New Fields
         riskIndex,
         aiReasoning,
@@ -664,29 +670,22 @@ export function runAdvancePlan({
   const violationCount = violations.length;
   const gapWarningCount = gapAlerts.length;
 
-  let verdictStatus, verdictMessage;
-  const diagnosticAdvice = [];
-
-  if (gapAlerts.some(g => g.isCritical)) {
-    verdictStatus = 'INFEASIBLE';
-    verdictMessage = `🚨 เตือนภัยวิกฤต: พบความเสี่ยง Tail Skin เบียด Segment แตก (Gap < 5mm)!`;
-    diagnosticAdvice.push('ระบบแนะนำให้สลับใช้คีย์คลายแรงเลี้ยว (Counter Key) ทันที');
-  } else if (gapWarningCount > 0) {
-    verdictStatus = 'WARNING';
-    verdictMessage = `⚠️ แผนใช้งานได้ — มีแจ้งเตือน Tail Gap แคบ (${gapWarningCount} ริง ต่ำสุด ${minObservedGap}mm)`;
-    diagnosticAdvice.push('AI ได้สลับคีย์คลาย Clearance เพื่อรักษาแก็ปปลอดภัย');
-  } else if (violationCount === 0) {
-    verdictStatus = 'OPTIMAL';
-    verdictMessage = `🎯 แผนสมบูรณ์แบบ Expert-Level — ${totalRings} ริง (UN:${unCount} RT:${rtCount} LT:${ltCount}) Risk Index เฉลี่ย ${avgRiskIndex}/100`;
-    diagnosticAdvice.push('Beam Search 3-ริง + Drift Detection + Articulation Guard ทำงานร่วมกันอย่างลงตัว');
-  } else {
-    verdictStatus = 'WARNING';
-    verdictMessage = `แผนใช้งานได้ดี — ${totalRings} ริง มี Lead เกินเล็กน้อย ${violationCount} ริง (สูงสุด ${maxObservedLead.toFixed(1)}mm)`;
-    diagnosticAdvice.push('ในโค้งรัศมีแคบ ค่า Lead แตะพีคชั่วคราวตามหลักจลนศาสตร์');
-  }
+  const summary = summarizeRings(allPlannedRings, { ...getLimits(gConfig), lead: limit });
+  const verdictStatus = summary.level === 'critical' ? 'INFEASIBLE' : summary.level === 'warning' ? 'WARNING' : summary.level === 'normal' ? 'OPTIMAL' : 'UNKNOWN';
+  const verdictMessage = summary.level === 'normal' ? `อยู่ในเกณฑ์ที่ตรวจ ${totalRings} ริง — รอตรวจทานก่อนใช้` : `พบ ${summary.problemCount} ริงที่ต้องตรวจทาน (Lead, DTA, Gap และ Suitability)`;
+  const ratioDiagnostics = sections.filter(sec => sec.isLocked || sec.planningMode === 'locked_ratio' || strategy === 'ratio_guided').map(sec => {
+    const rings = allPlannedRings.filter(r => r.sectionCode === sec.code);
+    const expected = computeRatioBreakdown(sec.ratio, rings.length);
+    const actual = { un: rings.filter(r=>r.type==='U').length, rt: rings.filter(r=>r.type==='R').length, lt: rings.filter(r=>r.type==='L').length };
+    return { sectionCode: sec.code, expected, actual, matches: expected.unCount===actual.un && expected.rtCount===actual.rt && expected.ltCount===actual.lt };
+  });
+  const diagnosticAdvice = [
+    `Lead เกินเกณฑ์ ${summary.leadCount} ริง · DTA เกิน ±75 mm ${summary.dtaCount} ริง · Gap เตือน/วิกฤต ${summary.gapCount} ริง`,
+    'ผลเป็นแผนคาดการณ์จากแบบจำลอง ไม่ใช่ค่าตรวจวัดสนามหรือการรับรองแผน',
+  ];
 
   return {
-    sections, totalRings, maxTolerance: limit,
+    summary, ratioDiagnostics, sections, totalRings, maxTolerance: limit,
     maxObservedLead: Number(maxObservedLead.toFixed(2)),
     maxDeviationMm: Number(maxDeviationMm.toFixed(1)),
     minObservedGap: Number(minObservedGap.toFixed(1)),
