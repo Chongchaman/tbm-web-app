@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { LayoutDashboard, Calculator, Sparkles, Compass, History, Database, Droplets, HardHat, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Calculator, Sparkles, Compass, History, Database, Droplets, HardHat, Building2, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen } from 'lucide-react';
 const AdvancePlannerView = lazy(() => import('./views/AdvancePlannerView'));
 const AutoPlannerView = lazy(() => import('./views/AutoPlannerView'));
 const PlannerView = lazy(() => import('./views/PlannerView'));
@@ -10,7 +10,8 @@ const MasterDataView = lazy(() => import('./views/MasterDataView'));
 const GuideView = lazy(() => import('./views/GuideView'));
 import ErrorBoundary from './components/ErrorBoundary';
 import SupabaseModal from './components/SupabaseModal';
-import { Field, StatusBadge, Dialog } from './components/PlannerUI';
+import AppearanceSettings from './components/AppearanceSettings';
+import { normalizeAppearance, appearanceTokens } from './services/appearance';
 import { INITIAL_RING_LOGS } from './data/tbmConstants';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { fetchRingLogsFromCloud, batchSaveRingLogsToCloud, batchDeleteRingLogsFromCloud, subscribeToRealtimeRings } from './services/supabaseService';
@@ -39,10 +40,11 @@ export default function AppShell() {
   const [cloudState,setCloudState] = useState('local');
   const [notice,setNotice] = useState(null);
   const [historyFilter,setHistoryFilter] = useState('all');
-  const [theme,setTheme] = useState(() => readStored('tbm_theme','light'));
-  const [fontFamily,setFontFamily] = useState(() => readStored('tbm_ui_font','sarabun'));
-  const [fontSize,setFontSize] = useState(() => readStored('tbm_ui_size','md'));
-  const [density,setDensity] = useState(() => readStored('tbm_density','comfortable'));
+  const [appearance,setAppearance] = useState(() => normalizeAppearance(readStored('tbm_appearance',{
+    theme:readStored('tbm_theme','light'),fontFamily:readStored('tbm_ui_font','sarabun'),fontSize:readStored('tbm_ui_size','md'),density:readStored('tbm_density','comfortable'),
+  })));
+  const { theme,fontFamily,fontSize,density }=appearance;
+  const BrandIcon={hardhat:HardHat,compass:Compass,building:Building2}[appearance.brandIcon];
   const [ringLogs,setRingLogs] = useState(() => {
     const saved = readStored('tbm_ring_logs',INITIAL_RING_LOGS);
     return sortRings((Array.isArray(saved) ? saved : INITIAL_RING_LOGS).filter(r => recordKind(r)!=='planned').map(canonical));
@@ -65,7 +67,16 @@ export default function AppShell() {
       document.documentElement.setAttribute(`data-${key==='fontFamily'?'font-family':key==='fontSize'?'font-size':key}`,value);
       try { localStorage.setItem(keys[key],JSON.stringify(value)); } catch { /* preferences remain available for this session */ }
     });
-  },[theme,fontFamily,fontSize,density]);
+    Object.entries(appearanceTokens(appearance)).forEach(([key,value])=>document.documentElement.style.setProperty(key,value));
+    document.title=`${appearance.appName} — ${appearance.projectName}`;
+    try {localStorage.setItem('tbm_appearance',JSON.stringify(appearance));} catch { /* settings remain available for this session */ }
+  },[appearance,theme,fontFamily,fontSize,density]);
+
+  const saveAppearance=value=>{
+    localStorage.setItem('tbm_appearance',JSON.stringify(value));
+    setAppearance(value);
+    setNotice({level:'normal',text:'บันทึกชื่อโครงการและหน้าตาในเบราว์เซอร์นี้แล้ว'});
+  };
 
   useEffect(()=>{
     try {
@@ -141,14 +152,14 @@ export default function AppShell() {
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),ringLogs,plans,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{})},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{})},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`tbm-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const active=menus.find(m=>m.id===activeTab);
   return <ErrorBoundary><a className="skip-link" href="#main-content">ข้ามไปเนื้อหา</a><div className="app-shell">
     {sidebarOpen && <button className="sidebar-overlay" aria-label="ปิดเมนู" onClick={()=>setSidebarOpen(false)} />}
-    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><HardHat size={24}/></div><div><strong>TBM PLANNER</strong><small>MWA-9D · TBM #34</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.length+plans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>ฐานข้อมูล Cloud<small style={{display:'block'}}>{!configured?'ใช้ข้อมูลในเครื่อง':cloudState==='live'?'Realtime เชื่อมต่อแล้ว':cloudState==='loaded'?'อ่าน Cloud แล้ว · รอ Realtime':cloudState==='error'?'เชื่อมต่อมีปัญหา':'กำลังตรวจการเชื่อมต่อ'}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
-    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project">/ MRT Purple Line</span></div><div className="topbar-actions"><button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setTheme(theme==='light'?'dark':'light')}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าการแสดงผล" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
+    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.length+plans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>ฐานข้อมูล Cloud<small style={{display:'block'}}>{!configured?'ใช้ข้อมูลในเครื่อง':cloudState==='live'?'Realtime เชื่อมต่อแล้ว':cloudState==='loaded'?'อ่าน Cloud แล้ว · รอ Realtime':cloudState==='error'?'เชื่อมต่อมีปัญหา':'กำลังตรวจการเชื่อมต่อ'}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
+    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions"><button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
     <main className="app-content" id="main-content">
       {notice && <div className={`notice-toast status-${notice.level}`} role="status"><span>{notice.text}</span><button className="icon-button" aria-label="ปิดข้อความ" onClick={()=>setNotice(null)}><X size={16}/></button></div>}
       <Suspense fallback={<div className="empty-state" role="status">กำลังเปิดหน้าจอ…</div>}>
@@ -162,7 +173,7 @@ export default function AppShell() {
       {activeTab==='guide' && <GuideView onNavigate={navigate}/>}
       </Suspense>
     </main></div></div>
-    {preferences && <div className="dialog-backdrop" onClick={()=>setPreferences(false)}><Dialog className="dialog preferences-dialog" label="ตั้งค่าการแสดงผล" onClose={()=>setPreferences(false)} onClick={e=>e.stopPropagation()}><div className="section-heading"><h2>ตั้งค่าการแสดงผล</h2><button className="icon-button" autoFocus aria-label="ปิดการตั้งค่า" onClick={()=>setPreferences(false)}><X size={18}/></button></div><div className="stack"><Field label="ฟอนต์"><select value={fontFamily} onChange={e=>setFontFamily(e.target.value)}>{[['sarabun','Sarabun'],['prompt','Prompt'],['noto','Noto Sans Thai'],['kanit','Kanit'],['chakra','Chakra Petch'],['mitr','Mitr']].map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></Field><Field label="ขนาดข้อความ"><select value={fontSize} onChange={e=>setFontSize(e.target.value)}>{[['sm','กระชับ'],['md','มาตรฐาน'],['lg','ใหญ่'],['xl','ใหญ่พิเศษ']].map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></Field><Field label="ระยะห่าง"><select value={density} onChange={e=>setDensity(e.target.value)}><option value="comfortable">อ่านสบาย</option><option value="compact">กระชับ</option></select></Field></div><StatusBadge level="normal">จำค่าการแสดงผลในเครื่องนี้</StatusBadge></Dialog></div>}
+    {preferences && <AppearanceSettings settings={appearance} onSave={saveAppearance} onClose={()=>setPreferences(false)} />}
     {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');}}/>}
   </ErrorBoundary>;
 }
