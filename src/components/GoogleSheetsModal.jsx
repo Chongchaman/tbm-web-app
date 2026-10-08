@@ -73,10 +73,10 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
       <div className="sheets-fields">
         <label>TBM1 · E/B Google Sheet<input value={config.sheetIdEB} onChange={event => setConfig(previous => ({ ...previous, sheetIdEB: event.target.value }))} disabled={working || connected} /></label>
         <label>TBM2 · W/B Google Sheet<input value={config.sheetIdWB} onChange={event => setConfig(previous => ({ ...previous, sheetIdWB: event.target.value }))} disabled={working || connected} /></label>
-        <label>OAuth Client ID<input value={config.clientId} onChange={event => setConfig(previous => ({ ...previous, clientId: event.target.value }))} disabled={working || connected} placeholder="…apps.googleusercontent.com" /></label>
+        <label>OAuth Client ID · Web application<input value={config.clientId} onChange={event => setConfig(previous => ({ ...previous, clientId: event.target.value }))} disabled={working || connected} placeholder="123456789-….apps.googleusercontent.com" autoComplete="off" /></label>
       </div>
       <div className="sheets-links"><a href={sheetUrl('EB')} target="_blank" rel="noreferrer"><ExternalLink size={15}/> เปิดชีต TBM1</a><a href={sheetUrl('WB')} target="_blank" rel="noreferrer"><ExternalLink size={15}/> เปิดชีต TBM2</a><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer"><ExternalLink size={15}/> สร้าง OAuth Client ID</a></div>
-      {!config.clientId && <p className="sheets-help">ตั้งค่าใน Google Cloud: เปิด Sheets API, ตั้งค่า OAuth consent screen, สร้าง OAuth client ประเภท Web application แล้วเพิ่ม Authorized JavaScript origin เป็น <code>{window.location.origin}</code> จากนั้นนำ Client ID มาวางที่นี่ ผู้ใช้คนอื่นต้องได้รับสิทธิ์แก้ชีตด้วย</p>}
+      {!config.clientId && <p className="sheets-help">ยังไม่มี Client ID สำหรับเว็บไซต์นี้ ให้สร้าง OAuth client ประเภท Web application ใน Google Cloud แล้วเพิ่ม Authorized JavaScript origin เป็น <code>{window.location.origin}</code> คัดลอกช่อง <strong>Client ID</strong> มาวางที่นี่ (ไม่ใช่ API key หรือ Client secret) ผู้ใช้ Google ที่จะเข้าใช้งานต้องมีสิทธิ์แก้ชีตทั้งสองไฟล์ด้วย</p>}
       {error && <div className="sheets-message is-error" role="alert">{error}</div>}
       {message && <div className="sheets-message" role="status">{message}</div>}
       <div className="sheets-actions">

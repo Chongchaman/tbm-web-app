@@ -5,6 +5,8 @@ const CONFIG_KEY = 'tbm_google_sheets_config';
 const PENDING_KEY = 'tbm_google_sheets_pending';
 const PENDING_STATE_KEY = 'tbm_google_sheets_pending_state';
 const MIGRATED_KEY = 'tbm_google_sheets_migrated';
+// Public OAuth Web Client ID. The browser token flow does not use a client secret.
+const DEFAULT_CLIENT_ID = '241587010481-t2ect3k7r78da75c3irnr8cdthc2pj41.apps.googleusercontent.com';
 const DEFAULT_SHEETS = {
   EB: '1dyc2SDKhpUyxHdVFDx2RHTcdIbwEgX3hPkwR8v4amB8',
   WB: '1gTafcYxS_DFSDbxj56ypzvExAhhL3TdhOylGeRgjLdI',
@@ -34,7 +36,7 @@ function storageRead(key, fallback) {
 export function getSheetsConfig() {
   const saved = storageRead(CONFIG_KEY, {});
   return {
-    clientId: saved.clientId || import.meta.env?.VITE_GOOGLE_CLIENT_ID || '',
+    clientId: saved.clientId || import.meta.env?.VITE_GOOGLE_CLIENT_ID || DEFAULT_CLIENT_ID,
     sheetIdEB: saved.sheetIdEB || saved.sheetId || import.meta.env?.VITE_GOOGLE_SHEET_ID_EB || DEFAULT_SHEETS.EB,
     sheetIdWB: saved.sheetIdWB || import.meta.env?.VITE_GOOGLE_SHEET_ID_WB || DEFAULT_SHEETS.WB,
   };
@@ -44,7 +46,8 @@ export function saveSheetsConfig(config) {
   const clientId = String(config.clientId || '').trim();
   const sheetIdEB = parseSheetId(config.sheetIdEB);
   const sheetIdWB = parseSheetId(config.sheetIdWB);
-  if (!clientId.endsWith('.apps.googleusercontent.com')) throw new Error('OAuth Client ID ไม่ถูกต้อง');
+  if (!clientId) throw new Error('ยังไม่ได้ตั้งค่า OAuth Client ID กรุณาสร้าง Client ID ประเภท Web application ใน Google Cloud ก่อน');
+  if (!clientId.endsWith('.apps.googleusercontent.com')) throw new Error('ค่านี้ไม่ใช่ OAuth Client ID ประเภท Web application กรุณาคัดลอก Client ID ที่ลงท้ายด้วย .apps.googleusercontent.com (ไม่ใช่ API key หรือ Client secret)');
   if (!sheetIdEB || !sheetIdWB) throw new Error('กรุณาใส่ลิงก์หรือ ID ของทั้งสอง Google Sheet');
   if (sheetIdEB === sheetIdWB) throw new Error('TBM1 และ TBM2 ต้องใช้ Google Sheet คนละไฟล์');
   localStorage.setItem(CONFIG_KEY, JSON.stringify({ clientId, sheetIdEB, sheetIdWB }));
