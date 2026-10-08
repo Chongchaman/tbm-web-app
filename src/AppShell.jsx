@@ -44,6 +44,7 @@ export default function AppShell() {
   const [preferences,setPreferences] = useState(false);
   const [configured,setConfigured] = useState(isSupabaseConfigured);
   const [cloudState,setCloudState] = useState('local');
+  const [cloudReconnectVersion,setCloudReconnectVersion] = useState(0);
   const [notice,setNotice] = useState(null);
   const [historyFilter,setHistoryFilter] = useState('all');
   const [appearance,setAppearance] = useState(() => normalizeAppearance(readStored('tbm_appearance',{
@@ -121,7 +122,7 @@ export default function AppShell() {
       setCloudState(previous=>previous==='live'?'live':'loaded');
     });
     return ()=>{active=false;stop?.();};
-  },[configured]);
+  },[configured,cloudReconnectVersion]);
 
   const navigate=(tab,filter='all')=>{setActiveTab(tab);setHistoryFilter(filter);setSidebarOpen(false);window.scrollTo({top:0,behavior:'instant'});};
   const changeAdvanceTrack=value=>{if(!['EB','WB'].includes(value))return;setAdvanceTrack(value);try{localStorage.setItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
@@ -183,6 +184,6 @@ export default function AppShell() {
       </Suspense>
     </main></div></div>
     {preferences && <AppearanceSettings settings={appearance} onSave={saveAppearance} onClose={()=>setPreferences(false)} />}
-    {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[identity(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');}}/>}
+    {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[identity(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');setNotice(null);if(value)setCloudReconnectVersion(previous=>previous+1);}}/>}
   </ErrorBoundary>;
 }

@@ -1,4 +1,5 @@
-import { getSupabaseClient } from './supabaseClient.js';
+import { getSupabaseClient, getSupabaseConfig } from './supabaseClient.js';
+import { describeSupabaseError } from './supabaseDiagnostics.js';
 import { recordKind, SEGMENT_WIDTHS } from './decisionSupport.js';
 
 /**
@@ -105,7 +106,7 @@ export async function fetchRingLogsFromCloud() {
     return { data: (data || []).map(formatDbRowToRing), error: null };
   } catch (e) {
     console.error('Failed to fetch ring logs from Supabase:', e);
-    return { data: null, error: e.message };
+    return { data: null, error: describeSupabaseError(e,getSupabaseConfig().url) };
   }
 }
 

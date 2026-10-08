@@ -8,6 +8,7 @@ import {
   testSupabaseConnection
 } from '../services/supabaseClient';
 import { batchSaveRingLogsToCloud, saveAlignmentToCloud, fetchRingLogsFromCloud } from '../services/supabaseService';
+import { supabaseProjectDashboardUrl } from '../services/supabaseDiagnostics';
 
 export default function SupabaseModal({
   isOpen,
@@ -40,14 +41,12 @@ export default function SupabaseModal({
   };
 
   const handleSaveAndConnect = async () => {
-    const success = saveSupabaseConfig(url, anonKey);
-    if (!success) {
-      alert('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า');
+    setTestStatus({ loading: true, message: 'กำลังทดสอบก่อนบันทึกการเชื่อมต่อ...' });
+    const res = await testSupabaseConnection(url, anonKey);
+    if (res.success && !saveSupabaseConfig(url, anonKey)) {
+      setTestStatus({loading:false,success:false,message:'บันทึกค่าการเชื่อมต่อในเครื่องไม่สำเร็จ'});
       return;
     }
-
-    setTestStatus({ loading: true, message: 'กำลังบันทึกและเชื่อมต่อ...' });
-    const res = await testSupabaseConnection(url, anonKey);
     setTestStatus({
       loading: false,
       success: res.success,
@@ -57,11 +56,6 @@ export default function SupabaseModal({
 
     if (res.success) {
       onConnectionChange(true);
-      // Auto pull fresh ring logs if available
-      const cloudData = await fetchRingLogsFromCloud();
-      if (cloudData.data && cloudData.data.length > 0) {
-        onSyncRingLogs(cloudData.data);
-      }
     }
   };
 
@@ -337,7 +331,7 @@ COMMIT;`;
                 <label className="text-text-muted flex items-center justify-between">
                   <span>Supabase Project URL</span>
                   <a
-                    href="https://supabase.com/dashboard"
+                    href={supabaseProjectDashboardUrl(url)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-acc flex items-center gap-1 text-[11px] hover:underline"
@@ -405,6 +399,7 @@ COMMIT;`;
                         👉 คลิกที่นี่เพื่อเปิดแท็บ SQL Schema แล้วนำไปรันใน Supabase
                       </button>
                     )}
+                    {!testStatus.loading && !testStatus.success && !testStatus.tableMissing && <a href={supabaseProjectDashboardUrl(url)} target="_blank" rel="noreferrer" className="block mt-1.5 text-acc font-bold hover:underline">ตรวจสถานะโครงการใน Supabase Dashboard ↗</a>}
                   </div>
                 </div>
               )}

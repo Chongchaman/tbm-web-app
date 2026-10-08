@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { describeSupabaseError } from './supabaseDiagnostics.js';
 
 const STORAGE_KEY_URL = 'tbm_supabase_url';
 const STORAGE_KEY_KEY = 'tbm_supabase_anon_key';
@@ -111,11 +112,11 @@ export async function testSupabaseConnection(customUrl, customKey) {
           message: 'เชื่อมต่อสำเร็จ แต่ยังไม่ได้สร้างตาราง (กรุณา Copy SQL Schema ไปรันใน Supabase SQL Editor)' 
         };
       }
-      return { success: false, message: `Supabase Error: ${error.message} (${error.code || 'ERR'})` };
+      return { success: false, message: describeSupabaseError(error,url) };
     }
 
     return { success: true, message: 'เชื่อมต่อฐานข้อมูล Supabase Cloud สำเร็จ 100%!' };
   } catch (e) {
-    return { success: false, message: `Connection Error: ${e.message}` };
+    return { success: false, message: describeSupabaseError(e,url) };
   }
 }
