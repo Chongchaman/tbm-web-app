@@ -84,7 +84,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
           <button className="btn btn-outline" disabled={working} onClick={() => { disconnectSheets(); setConnected(false); onConnectionChange(false); setMessage('ออกจากการเชื่อมต่อแล้ว'); }}>ตัดการเชื่อมต่อ</button>
         </>}
       </div>
-      <p className="sheets-footnote">หลังเชื่อมต่อ เว็บจะตรวจและซิงก์ข้อมูลเพิ่ม แก้ไข และลบกับทั้งสองชีตอัตโนมัติทุกประมาณ 5 วินาที การลบจากหน้าเว็บจะลบแถวจริงในแท็บ Records ของชีตเครื่องนั้นด้วย</p>
+      <p className="sheets-footnote">การเพิ่ม แก้ไข และลบจากเว็บจะส่งเข้า Google Sheet ทันที พร้อมอัปเดตแท็บเว็บอื่นทันที ระบบตรวจการเปลี่ยนจากชีตหรืออุปกรณ์อื่นทุกประมาณ 3 วินาที และการลบจากเว็บจะลบแถวจริงในแท็บ Records</p>
     </section>
   </div>;
 }

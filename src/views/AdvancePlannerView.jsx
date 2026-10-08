@@ -11,6 +11,7 @@ import { Sparkles, Layers, Sliders, TrendingUp, CheckCircle2, Download, Plus, Tr
 import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
 import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
+import SegmentPlanningWorkspace from '../components/SegmentPlanningWorkspace';
 import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, parseSTA } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
 import { soilAt, soilSheetAt, tunnelElevationAt } from '../services/soilProfile';
@@ -333,6 +334,22 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const selectedRing = planResult.plannedRings[scrubStep-1];
   const tableRings = summary.assessed.filter(r => resultFilter==='all' || resultFilter==='issues' && r.level!=='normal' || r.issues.some(i=>i.code===resultFilter)).map(r=>r.ring);
   const showIssues = filter => { setResultFilter(filter); setActiveSubTab('table'); };
+
+  const compactWorkspace = localStorage.getItem('tbm_legacy_workspace') !== '1';
+  if (compactWorkspace) return <SegmentPlanningWorkspace
+    track={track} onNavigate={onNavigate} inputErrors={inputErrors} needsRecalc={needsRecalc} appliedSuccess={appliedSuccess} saving={saving}
+    handleCalculate={handleCalculate} handleBatchSave={handleBatchSave} handleExportCSV={handleExportCSV} handleResetSections={handleResetSections}
+    currentSTA={currentSTA} changeCurrentSTA={value=>{setCurrentSTA(value);setRecovery(previous=>({...previous,initialStateConfirmed:false}));markDirty();}}
+    recovery={recovery} changeRecovery={(key,value)=>{setRecovery(previous=>({...previous,[key]:value,...(key.startsWith('start')?{initialStateConfirmed:false}:{})}));markDirty();}}
+    strategy={strategy} changeStrategy={value=>{setStrategy(value);markDirty();}}
+    startKey={startKey} changeStartKey={value=>{setStartKey(value);markDirty();}}
+    startHLead={startHLead} changeStartHLead={value=>{setStartHLead(value);markDirty();}}
+    startVLead={startVLead} changeStartVLead={value=>{setStartVLead(value);markDirty();}}
+    maxTolerance={maxTolerance} changeMaxTolerance={value=>{setMaxTolerance(value);markDirty();}}
+    steeringSign={steeringSign} changeSteeringSign={value=>{setSteeringSign(value);markDirty();}}
+    planResult={planResult} summary={summary} sections={sections} resultFilter={resultFilter} setResultFilter={setResultFilter} tableRings={tableRings}
+    scrubStep={scrubStep} setScrubStep={setScrubStep} selectedRing={selectedRing}
+  />;
 
 
   return (

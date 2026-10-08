@@ -18,6 +18,7 @@ export default function Tunnel2DVisualizer({
   planResult,
   scrubStep = 1,
   onSelectStep = () => {},
+  compact = false,
 }) {
   const containerRef = useRef(null);
   const svgRef = useRef(null);
@@ -104,7 +105,7 @@ export default function Tunnel2DVisualizer({
 
   // Base SVG Canvas Dimensions
   const canvasW = 900;
-  const canvasH = isExpanded ? 650 : 460;
+  const canvasH = compact ? 350 : isExpanded ? 650 : 460;
 
   // Coordinate projection from Metric meters to base SVG space (NaN-safe)
   const project = useCallback((mX, mY) => {
@@ -302,7 +303,7 @@ export default function Tunnel2DVisualizer({
   return (
     <div className="space-y-3 font-sans">
       {/* Top Interactive HUD Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-surf-3/80 p-3 rounded-2xl border border-white/10 text-xs font-mono">
+      {!compact && <div className="flex flex-wrap items-center justify-between gap-3 bg-surf-3/80 p-3 rounded-2xl border border-white/10 text-xs font-mono">
         {/* Layer Visibility Toggles */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-text-muted text-[11px] font-sans font-bold flex items-center gap-1 mr-1">
@@ -486,7 +487,7 @@ export default function Tunnel2DVisualizer({
             {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Main SVG Interactive Map Canvas */}
       <div
@@ -954,7 +955,7 @@ export default function Tunnel2DVisualizer({
         </div>
 
         {/* Real-time Ring Specs HUD */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+        {!compact && <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
           <div className="bg-surf-3/60 p-2 rounded-xl border border-white/5">
             <span className="text-[10px] text-text-muted block">Ring / Step</span>
             <span className="font-bold text-acc text-sm">{currentRing.ringNum} (#{currentRing.step})</span>
@@ -996,7 +997,7 @@ export default function Tunnel2DVisualizer({
             <span className="text-[10px] text-text-muted block">Suitability Status</span>
             <KeySuitabilityBadge suitability={currentRing.suitability} size="sm" />
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

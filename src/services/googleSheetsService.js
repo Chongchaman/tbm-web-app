@@ -13,6 +13,7 @@ const DEFAULT_SHEETS = {
 };
 const BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+const SYNC_CHANNEL = 'tbm-google-sheets-live';
 export const PROJECT_KEYS = [
   'tbm_appearance', 'tbm_theme', 'tbm_ui_font', 'tbm_ui_size', 'tbm_density',
   'tbm_horizontal_alignment', 'tbm_vertical_alignment',
@@ -29,6 +30,7 @@ let accessToken = '';
 let gisPromise;
 let stateTimer;
 const recordsSheetIds = new Map();
+const liveChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window ? new window.BroadcastChannel(SYNC_CHANNEL) : null;
 
 function storageRead(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -157,7 +159,7 @@ export function setProjectItem(key, value) {
   localStorage.setItem(PENDING_STATE_KEY, JSON.stringify(pending));
   if (accessToken) {
     clearTimeout(stateTimer);
-    stateTimer = setTimeout(() => { flushPendingProjectState().catch(() => {}); }, 850);
+    stateTimer = setTimeout(() => { flushPendingProjectState().catch(() => {}); }, 120);
   }
 }
 
@@ -168,6 +170,14 @@ export function queueRecordChanges(records, operation) {
     pending[id] = { operation, record, queuedAt: new Date().toISOString() };
   }
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  liveChannel?.postMessage({ type:'records', operation, records, sentAt:Date.now() });
+}
+
+export function subscribeRecordChanges(handler) {
+  if (typeof window === 'undefined') return () => {};
+  const receive = event => { if (event.data?.type === 'records') handler(event.data); };
+  liveChannel?.addEventListener('message', receive);
+  return () => liveChannel?.removeEventListener('message', receive);
 }
 
 function clearPending(entries) {
