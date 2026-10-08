@@ -6,22 +6,24 @@ const formatSTA = value => {
   return `${String(km).padStart(2, '0')}+${(value % 1000).toFixed(3).padStart(7, '0')}`;
 };
 
-export default function SoilProfilePanel({ station, track, onTrackChange, elevations, onElevationChange }) {
+export default function SoilProfilePanel({ stations, track, onTrackChange, elevations, onStationChange, onElevationChange }) {
   return <section className="card soil-panel" aria-label="ชั้นดินจากแบบ Soil Profile">
     <div className="soil-heading">
-      <div><span className="eyebrow">Orange Line · Soil profile</span><h3>ชั้นดินที่ STA {station || '—'}</h3>
-        <p className="section-note">แผน EB และ WB แยกกัน · หน้าตัดชั้นดินด้านล่างอ่านจากแบบโครงการตาม STA และระดับ mRL</p></div>
+      <div><span className="eyebrow">Orange Line · Soil profile</span><h3>เปรียบเทียบชั้นดิน EB / WB</h3>
+        <p className="section-note">STA ของแต่ละแนวเชื่อมกับหน้าแผน Segment ของเครื่องนั้น · ระดับ mRL ใช้เฉพาะ STA ที่ระบุ</p></div>
       <div className="soil-track-switch" role="group" aria-label="เลือกแนวสำหรับวางแผน">
         {SOIL_TRACKS.map(value => <button key={value} type="button" className="btn btn-outline" aria-pressed={track === value}
           onClick={() => onTrackChange(value)}>{value === 'EB' ? 'TBM1 · EB' : 'TBM2 · WB'}</button>)}
       </div>
     </div>
     <div className="soil-track-grid">{SOIL_TRACKS.map(value => {
+      const station=stations[value];
       const sheet = soilSheetAt(station, value);
       const result = soilAt(station, value, elevations[value]);
       const column = soilColumnAt(station, value);
       return <div className={`soil-track-card ${track === value ? 'is-active' : ''}`} key={value}>
-        <div className="soil-card-title"><strong>{value}</strong><span>{track === value ? 'กำลังวางแผนแนวนี้' : 'ดูเทียบอีกแนว'}</span></div>
+        <div className="soil-card-title"><strong>{value === 'EB' ? 'TBM1 · EB' : 'TBM2 · WB'}</strong><span>{track === value ? 'เครื่องที่เลือก' : 'ดูเทียบอีกแนว'}</span></div>
+        <Field label={`STA หัวเจาะ ${value}`}><input value={station} onChange={event=>onStationChange(value,event.target.value)} placeholder="เช่น 20+180.000"/></Field>
         {sheet ? <><p className="section-note">STA {formatSTA(sheet.start)}–{formatSTA(sheet.end)} · หน้า {sheet.page}/42 · {sheet.drawing}</p>
           <Field label={`ระดับศูนย์กลางอุโมงค์ ${value} (mRL)`}><input type="number" inputMode="decimal" step="0.1" min="30" max="105"
             placeholder="กรอกจากแบบแนวอุโมงค์" value={elevations[value] ?? ''}
