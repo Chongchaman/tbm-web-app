@@ -6,7 +6,7 @@ import { buildAlignmentPosition } from '../services/alignmentPosition';
 import { DEFAULT_RECOVERY } from '../services/alignmentRecovery';
 import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, createNewSection, createNewVerticalElement } from '../services/advancePlanner';
 import { readStored } from '../services/decisionSupport';
-import { soilAt, soilColumnAt, soilLevelAtStation, stationMeters } from '../services/soilProfile';
+import { soilAt, soilColumnAt, stationMeters, tunnelElevationAt } from '../services/soilProfile';
 import { tbmMode } from '../services/tbmMode';
 
 const formattedSTA = value => {
@@ -117,8 +117,6 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
     const vProfile=Array.isArray(saved.vProfile)&&saved.vProfile.length?saved.vProfile:readStored(`tbm_vertical_alignment_${track}`,readStored('tbm_vertical_alignment',DEFAULT_VERTICAL_ALIGNMENT));
     return {...saved,sections,vProfile,currentSTA:saved.currentSTA??sections[0]?.startSTA??'',recovery:{...DEFAULT_RECOVERY,...saved.recovery}};
   });
-  const [soilLevels,setSoilLevels]=useState(()=>readStored('tbm_soil_levels',{EB:'',WB:''}));
-  const [soilStations,setSoilStations]=useState(()=>readStored('tbm_soil_level_stations',{}));
   const setPlan=value=>{const next={...session,...value};setProjectItem(`tbm_advance_session_${track}`,JSON.stringify(next));setSession(next);};
   const setAlignment=value=>setPlan({...value,recovery:{...session.recovery,initialStateConfirmed:false},
     ...(value.vProfile?{verticalDatumConfirmed:false}:{})});
@@ -132,10 +130,8 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
   const addVertical=()=>{const last=session.vProfile.at(-1),sign=Math.sign(stationMeters(last.endSTA)-stationMeters(last.startSTA))||-1;
     const next={...createNewVerticalElement(),startSTA:last.endSTA,endSTA:formattedSTA(stationMeters(last.endSTA)+sign*50),startElev:last.endElev,endElev:last.endElev};
     setAlignment({vProfile:[...session.vProfile,next]});};
-  const changeSoilLevel=value=>{const nextLevels={...soilLevels,[track]:value},nextStations={...soilStations,[track]:session.currentSTA};
-    setProjectItem('tbm_soil_levels',JSON.stringify(nextLevels));setProjectItem('tbm_soil_level_stations',JSON.stringify(nextStations));
-    setSoilLevels(nextLevels);setSoilStations(nextStations);};
-  const level=soilLevelAtStation(soilLevels,soilStations,track,session.currentSTA);
+  const drawingPoint=tunnelElevationAt(session.currentSTA,track);
+  const level=drawingPoint?.elevation ?? '';
   const model=useMemo(()=>buildAlignmentPosition({sections:session.sections,vertical:session.vProfile,currentSTA:session.currentSTA,recovery:session.recovery}),[session]);
   const currentSoil=soilAt(session.currentSTA,track,level);
   const progress=model.errors.length?0:Math.round(model.currentDistance/model.totalDistance*100);
@@ -151,7 +147,7 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
         <Field label="เยื้อง V (mm) · +ขึ้น"><input type="number" step="any" value={session.recovery.startDeviationV} onChange={event=>changeRecovery('startDeviationV',event.target.value)}/></Field>
         <Field label="มุมหัวเจาะ H (°)"><input type="number" step="any" value={session.recovery.startHeadingErrorDeg} onChange={event=>changeRecovery('startHeadingErrorDeg',event.target.value)}/></Field>
         <Field label="มุมหัวเจาะ V (°)"><input type="number" step="any" value={session.recovery.startPitchErrorDeg} onChange={event=>changeRecovery('startPitchErrorDeg',event.target.value)}/></Field>
-        <Field label="ศูนย์กลางหัวเจาะจากแบบดิน (mRL)"><input type="number" step="0.1" placeholder="ระบุระดับ mRL ณ STA นี้" value={level} onChange={event=>changeSoilLevel(event.target.value)}/></Field></div>
+        <Field label="ศูนย์กลางหัวเจาะจากแบบดิน (mRL)"><input readOnly value={drawingPoint ? drawingPoint.elevation.toFixed(3) : ''} placeholder="นอกช่วง OR10–TCC"/></Field></div>
       <label className="position-confirm"><input type="checkbox" checked={session.recovery.initialStateConfirmed===true} onChange={event=>setPlan({recovery:{...session.recovery,initialStateConfirmed:event.target.checked}})}/>
         ยืนยัน STA, ระยะเยื้องและมุมจาก Survey / Navigation ของ {mode.title}</label>
       {!model.confirmed&&<p className="position-warning">ภาพหัวเจาะใช้ค่าตัวอย่าง/ยังไม่ยืนยันสนาม · กรอกค่าตรวจจริงและติ๊กยืนยันก่อนอ่านเป็นตำแหน่งปัจจุบัน</p>}
@@ -162,16 +158,12 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
     {!model.errors.length&&<><div className="position-stats"><div><small>ตำแหน่งหัวเจาะ</small><strong>{formattedSTA(model.current.sta)}</strong><span>{mode.title} · ช่วง {model.current.section}</span></div>
       <div><small>ขุดผ่านตาม Alignment</small><strong>{model.currentDistance.toFixed(1)} / {model.totalDistance.toFixed(1)} m</strong><span>{progress}% ของแนวที่กรอก</span></div>
       <div><small>ระดับแนวออกแบบ</small><strong>{model.current.elevation===null?'ไม่มีข้อมูล':`${model.current.elevation.toFixed(3)} m`}</strong><span>{session.verticalDatumConfirmed?'ยืนยัน datum mRL แล้ว':'ยังไม่ยืนยัน datum mRL'}</span></div>
-      <div><small>ชั้นดิน ณ หัวเจาะ</small><strong>{currentSoil.soil?.label||'รอระดับ mRL'}</strong><span>{currentSoil.sheet?`Orange Line · หน้า ${currentSoil.sheet.page}/42`:'นอกช่วงแบบดิน'}</span></div></div>
+      <div><small>ชั้นดิน ณ หัวเจาะ</small><strong>{currentSoil.soil?.label||(currentSoil.status==='unclear'?'รอยต่อ/อ่านไม่ชัด':'นอกช่วง OR10–TCC')}</strong><span>{currentSoil.sheet?`Orange Line · หน้า ${currentSoil.sheet.page}/42`:'นอกช่วงแบบดิน'}</span></div></div>
       <div className="position-visual-grid"><section className="card position-chart position-chart-wide"><div className="position-chart-heading"><div><span className="eyebrow">02 · Longitudinal section</span><h3>แนวดิ่งตาม STA</h3></div><span className="position-badge">{session.verticalDatumConfirmed?'mRL ยืนยันแล้ว':'ระดับอ้างอิงยังไม่ยืนยัน datum'}</span></div>
           <LongitudinalSection model={model}/><p className="section-note">เส้นระดับจาก Alignment ที่กรอกในแผนเครื่องนี้ · กราฟขยายแนวดิ่งเพื่อให้อ่านความชันได้ ระยะเยื้อง V ระดับ mm อาจมองไม่เห็นที่สเกลทั้งแนว</p></section>
         <section className="card position-chart"><div className="position-chart-heading"><div><span className="eyebrow">03 · Face section</span><h3>หัวเจาะในหน้าตัดชั้นดิน</h3></div><Layers3 size={21}/></div>
           <SoilHeadSection station={session.currentSTA} track={track} level={level}/>
-          <label className="position-confirm"><input type="checkbox" checked={session.verticalDatumConfirmed===true} onChange={event=>setPlan({verticalDatumConfirmed:event.target.checked})}/>
-            ยืนยันว่าระดับ Alignment ใช้ datum mRL เดียวกับแบบ Orange Line</label>
-          <button className="btn btn-outline" disabled={!session.verticalDatumConfirmed||!model.confirmed||model.tbm.elevation===null||model.tbm.elevation<30||model.tbm.elevation>105}
-            onClick={()=>changeSoilLevel(model.tbm.elevation.toFixed(3))}>ใช้ระดับหัวเจาะจาก Alignment</button>
-          <p className="section-note">ปุ่มนี้ใช้ได้หลังยืนยัน datum และค่าตรวจสนาม หากไม่ตรงกันให้กรอกระดับ mRL จากแบบ/Survey โดยตรง</p></section>
+          <p className="section-note">ตำแหน่งในหน้าตัดนี้ใช้ระดับแนว {track} จากแบบ Orange Line โดยอัตโนมัติ เฉพาะช่วง OR10 ถึง TCC</p></section>
         <section className="card position-chart"><div className="position-chart-heading"><div><span className="eyebrow">04 · Detail zoom</span><h3>ขยายระยะเยื้องจากแนว</h3></div><Crosshair size={21}/></div><OffsetZoom model={model}/>
           <p className="section-note">ภาพขยายแสดงตำแหน่ง H/V ในหน่วย mm ตามเครื่องหมายที่กรอก ไม่ใช่หน้าตัดวงแหวนจริง</p></section></div></>}
     <details className="card position-editor"><summary>แก้ Alignment ของ {mode.title} ในหน้านี้</summary><p className="section-note">แก้แล้วภาพเปลี่ยนทันทีและบันทึกให้หน้าแผน Segment ของเครื่องเดียวกัน ตรวจ STA ให้ต่อเนื่องก่อนใช้ผล</p>

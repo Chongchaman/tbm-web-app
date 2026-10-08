@@ -275,27 +275,43 @@ body { background-color:var(--bg); background-image:var(--ui-backdrop,none); bac
 .soil-track-switch { display:flex; gap:8px; flex-wrap:wrap; }
 .soil-track-switch .btn { white-space:nowrap; }
 .soil-track-switch .btn[aria-pressed="true"] { background:var(--acc-soft); color:var(--acc); border-color:var(--acc); }
-.soil-track-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-.soil-track-card { min-width:0; padding:18px; border:1px solid var(--border); border-radius:14px; background:var(--surf-2); }
-.soil-track-card.is-active { border-color:var(--acc); box-shadow:inset 0 0 0 1px var(--acc); }
-.soil-card-title { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:7px; }
-.soil-card-title strong { font-size:1.25rem; color:var(--acc); }
-.soil-card-title span { font-size:.78rem; color:var(--text-muted); }
-.soil-track-card .field { margin:13px 0; }
-.soil-result { min-height:68px; display:flex; flex-direction:column; justify-content:center; gap:4px; padding:11px 13px; margin:12px 0; border-radius:10px; border:1px solid var(--border); background:var(--surf); }
-.soil-result strong { font-size:.94rem; }
-.soil-result span { font-size:.79rem; color:var(--text-muted); }
-.soil-result-interpreted { border-color:#54ae80; background:rgba(67,168,111,.09); }
-.soil-result-boundary,.soil-result-unclear { border-color:#d2a244; background:rgba(210,162,68,.1); }
-.soil-column { display:flex; gap:2px; width:100%; overflow:hidden; border-radius:6px; border:1px solid var(--border); }
-.soil-column-cell { flex:1; min-width:0; height:26px; position:relative; }
-.soil-column-cell small { position:absolute; left:2px; bottom:2px; font-size:9px; line-height:1; color:#192236; }
-.soil-column-caption { margin-top:5px; font-size:.7rem; color:var(--text-muted); }
+.soil-control-grid { display:grid; grid-template-columns:1.1fr 1fr 1fr auto; gap:12px; align-items:end; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surf-2); }
+.soil-range-presets { display:flex; gap:6px; align-items:center; padding-bottom:1px; }
+.soil-range-presets .btn { min-height:42px; padding:8px 11px; white-space:nowrap; }
+.soil-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.soil-summary>div { display:flex; align-items:center; gap:10px; min-width:0; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surf); }
+.soil-summary svg { flex:none; color:var(--acc); }
+.soil-summary span:not(.soil-page-number) { display:grid; min-width:0; color:var(--text-muted); font-size:.74rem; }
+.soil-summary strong { overflow:hidden; color:var(--text); font-size:.9rem; text-overflow:ellipsis; white-space:nowrap; }
+.soil-page-number { display:grid; place-items:center; flex:none; width:30px; height:30px; border-radius:8px; color:var(--acc-contrast); background:var(--acc); font-weight:800; }
+.soil-chart-wrap { position:relative; overflow:hidden; border:1px solid var(--border); border-radius:12px; background:var(--surf-2); }
+.soil-chart { display:block; width:100%; min-width:720px; height:auto; }
+.soil-chart-bg { fill:var(--surf); }
+.soil-grid-line { stroke:color-mix(in srgb,var(--border) 78%,transparent); stroke-width:1; }
+.soil-axis-label,.soil-axis-title { fill:var(--text-muted); font-family:system-ui,sans-serif; font-size:11px; }
+.soil-axis-title { font-size:12px; font-weight:700; }
+.soil-rail { fill:none; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.soil-rail-active { stroke:var(--acc); stroke-width:4; }
+.soil-rail-other { stroke:var(--text-muted); stroke-width:2; stroke-dasharray:7 6; opacity:.85; }
+.soil-current-line { stroke:var(--danger); stroke-width:1.5; stroke-dasharray:4 4; vector-effect:non-scaling-stroke; }
+.soil-tbm-marker>g rect,.soil-tbm-marker>g path { fill:#ef8b39; stroke:#6d3510; stroke-width:1.5; vector-effect:non-scaling-stroke; }
+.soil-tbm-marker>g line { stroke:#fff; stroke-width:1.5; vector-effect:non-scaling-stroke; }
+.soil-head-label rect { fill:var(--surf)!important; stroke:var(--acc)!important; }
+.soil-head-label text { fill:var(--text); font-size:10px; font-weight:700; }
+.soil-empty { display:grid; place-items:center; min-height:360px; color:var(--text-muted); }
+.soil-chart-message { position:absolute; top:12px; right:12px; display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); background:var(--surf); font-size:.78rem; }
+.soil-chart-key { display:flex; flex-wrap:wrap; gap:14px; color:var(--text-muted); font-size:.76rem; }
+.soil-chart-key span { display:inline-flex; align-items:center; gap:6px; }
+.soil-chart-key i { display:inline-block; width:22px; height:3px; border-radius:9px; background:var(--acc); }
+.soil-chart-key .key-other { height:2px; background:repeating-linear-gradient(90deg,var(--text-muted) 0 5px,transparent 5px 8px); }
+.soil-chart-key .key-head { width:15px; height:10px; border:1px solid #6d3510; border-radius:2px; background:#ef8b39; }
 .soil-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:.78rem; color:var(--text-muted); }
 .soil-legend span { display:inline-flex; gap:5px; align-items:center; }
 .soil-legend i { width:11px; height:11px; border-radius:3px; border:1px solid rgba(0,0,0,.15); }
 .soil-disclaimer { padding-top:10px; border-top:1px solid var(--border); }
-@media(max-width:850px) { .soil-heading { flex-direction:column; } .soil-track-grid { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:1050px) { .soil-control-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .soil-range-presets { grid-column:1/-1; } .soil-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:850px) { .soil-heading { flex-direction:column; } .soil-chart-wrap { overflow-x:auto; } }
+@media(max-width:620px) { .soil-control-grid { grid-template-columns:minmax(0,1fr); } .soil-range-presets { grid-column:auto; flex-wrap:wrap; } .soil-summary { grid-template-columns:minmax(0,1fr); } }
 .topbar-tbm-switch { display:flex; align-items:center; gap:3px; padding:3px; border:1px solid var(--border); border-radius:10px; background:var(--surf-2); }
 .topbar-tbm-switch button { display:flex; align-items:center; gap:4px; border:0; border-radius:7px; padding:5px 9px; color:var(--text-muted); background:transparent; font-size:.76rem; font-weight:700; }
 .topbar-tbm-switch button[aria-pressed="true"] { color:var(--acc); background:var(--acc-soft); }

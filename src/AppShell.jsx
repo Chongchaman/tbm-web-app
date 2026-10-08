@@ -15,7 +15,7 @@ import GoogleSheetsModal from './components/GoogleSheetsModal';
 import AppearanceSettings from './components/AppearanceSettings';
 import { normalizeAppearance, appearanceTokens } from './services/appearance';
 import { INITIAL_RING_LOGS } from './data/tbmConstants';
-import { flushPendingRecords, isSheetsConnected, pendingCount, queueRecordChanges, setProjectItem } from './services/googleSheetsService';
+import { fetchSheetSnapshot, flushPendingProjectState, flushPendingRecords, isSheetsConnected, pendingCount, queueRecordChanges, setProjectItem } from './services/googleSheetsService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
 import { tbmMode } from './services/tbmMode';
@@ -61,9 +61,12 @@ export default function AppShell() {
     return sortRings([...new Map([...(Array.isArray(saved)?saved:[]),...migrated].map(r=>{const plan=canonical({...r,recordType:'planned'});return [identity(plan),plan];})).values()]);
   });
   const busy = useRef(false);
+  const syncing = useRef(false);
   const logsRef = useRef(ringLogs);
+  const plansRef = useRef(plans);
   const backupMade = useRef(false);
   useEffect(()=>{ logsRef.current=ringLogs; },[ringLogs]);
+  useEffect(()=>{ plansRef.current=plans; },[plans]);
 
   useEffect(()=>{
     const values={theme,fontFamily,fontSize,density};
@@ -95,6 +98,31 @@ export default function AppShell() {
       setProjectItem('tbm_ring_logs',JSON.stringify(ringLogs));
     } catch { queueMicrotask(()=>setNotice({level:'critical',text:'พื้นที่บันทึกในเครื่องไม่พอ กรุณาสำรองข้อมูลก่อนปิดหน้า'})); }
   },[ringLogs,plans]);
+
+  useEffect(()=>{
+    if(!connected || localStorage.getItem('tbm_google_sheets_migrated')!=='1') return undefined;
+    let active=true;
+    const syncNow=async()=>{
+      if(!active || busy.current || syncing.current) return;
+      syncing.current=true;
+      try {
+        await Promise.all([flushPendingRecords(),flushPendingProjectState()]);
+        const snapshot=await fetchSheetSnapshot();
+        if(!active) return;
+        const nextLogs=sortRings(snapshot.records.filter(record=>recordKind(record)!=='planned').map(canonical));
+        const nextPlans=sortRings(snapshot.records.filter(record=>recordKind(record)==='planned').map(canonical));
+        const same=(left,right)=>left.length===right.length&&left.every((record,index)=>identity(record)===identity(right[index])&&JSON.stringify(record)===JSON.stringify(right[index]));
+        if(!same(logsRef.current,nextLogs)) setRingLogs(nextLogs);
+        if(!same(plansRef.current,nextPlans)) setPlans(nextPlans);
+        setCloudState('live');
+      } catch {
+        if(active) setCloudState('error');
+      } finally { syncing.current=false; }
+    };
+    syncNow();
+    const timer=window.setInterval(syncNow,5000);
+    return ()=>{active=false;window.clearInterval(timer);};
+  },[connected]);
 
   const navigate=(tab,filter='all')=>{setActiveTab(tab);setHistoryFilter(filter);setSidebarOpen(false);window.scrollTo({top:0,behavior:'instant'});};
   const changeAdvanceTrack=value=>{if(!['EB','WB'].includes(value))return;setAdvanceTrack(value);try{setProjectItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};

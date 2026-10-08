@@ -28,6 +28,7 @@ export const PROJECT_KEYS = [
 let accessToken = '';
 let gisPromise;
 let stateTimer;
+const recordsSheetIds = new Map();
 
 function storageRead(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -226,19 +227,43 @@ export async function flushPendingRecords() {
 
 async function flushRecordGroup(track, entries) {
   const sheetId = sheetIdFor(track);
+  const deletes = entries.filter(([, item]) => item.operation === 'delete');
+  const saves = entries.filter(([, item]) => item.operation !== 'delete');
+  if (deletes.length) {
+    const result = await sheetsRequest('GET', rangePath(sheetId, 'Records!A2:A'));
+    const deleteIds = new Set(deletes.map(([id]) => id));
+    const rowIndexes = (result.values || []).flatMap((row, index) => deleteIds.has(row[0]) ? [index + 1] : []).sort((a, b) => b - a);
+    if (rowIndexes.length) {
+      const numericSheetId = await recordsSheetId(sheetId);
+      await sheetsRequest('POST', `/${encodeURIComponent(sheetId)}:batchUpdate`, { requests: rowIndexes.map(rowIndex => ({
+        deleteDimension: { range: { sheetId: numericSheetId, dimension: 'ROWS', startIndex: rowIndex, endIndex: rowIndex + 1 } },
+      })) });
+    }
+    clearPending(deletes);
+  }
+  if (!saves.length) return entries.length;
   const result = await sheetsRequest('GET', rangePath(sheetId, 'Records!A2:A'));
   const existing = new Map((result.values || []).map((row, index) => [row[0], index + 2]));
   const updates = [];
   const appends = [];
-  for (const [id, item] of entries) {
-    const row = recordRow(item.record, item.operation === 'delete' ? item.queuedAt : '');
+  for (const [id, item] of saves) {
+    const row = recordRow(item.record);
     if (existing.has(id)) updates.push({ range: `Records!A${existing.get(id)}:I${existing.get(id)}`, values: [row] });
     else appends.push(row);
   }
   if (updates.length) await sheetsRequest('POST', `/${encodeURIComponent(sheetId)}/values:batchUpdate`, { valueInputOption: 'RAW', data: updates });
   if (appends.length) await sheetsRequest('POST', `${rangePath(sheetId, 'Records!A:I')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { values: appends });
-  clearPending(entries);
+  clearPending(saves);
   return entries.length;
+}
+
+async function recordsSheetId(spreadsheetId) {
+  if (recordsSheetIds.has(spreadsheetId)) return recordsSheetIds.get(spreadsheetId);
+  const result = await sheetsRequest('GET', `/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties(sheetId,title)`);
+  const sheet = result.sheets?.find(item => item.properties?.title === 'Records');
+  if (!sheet) throw new Error('ไม่พบแท็บ Records ใน Google Sheet');
+  recordsSheetIds.set(spreadsheetId, sheet.properties.sheetId);
+  return sheet.properties.sheetId;
 }
 
 export function captureProjectState() {

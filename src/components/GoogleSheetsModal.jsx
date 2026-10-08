@@ -5,7 +5,6 @@ import {
   flushPendingProjectState, flushPendingRecords, getSheetsConfig, isSheetsConnected, pendingCount,
   queueRecordChanges, restoreProjectState, saveSheetsConfig, uploadProjectState,
 } from '../services/googleSheetsService';
-import { recordIdentity } from '../services/recordIdentity';
 import { recordKind } from '../services/decisionSupport';
 
 export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLogs, plans }) {
@@ -28,9 +27,9 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
     setConfig(saved);
     await connectSheets(saved);
     setConnected(true);
-    onConnectionChange(true);
     if (localStorage.getItem('tbm_google_sheets_migrated') === '1') {
       const [recordCount, stateCount] = await Promise.all([flushPendingRecords(), flushPendingProjectState()]);
+      onConnectionChange(true);
       setMessage(`เชื่อมต่อทั้งสองชีตแล้ว · ส่งรายการค้าง ${recordCount} ริง และข้อมูลตั้งค่า ${stateCount} รายการ`);
     } else {
       const [snapshot, state] = await Promise.all([fetchSheetSnapshot(), fetchProjectState()]);
@@ -38,6 +37,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
         queueRecordChanges([...ringLogs, ...plans], 'save');
         const count = await flushPendingRecords();
         await uploadProjectState();
+        onConnectionChange(true);
         setMessage(`สร้างข้อมูลเริ่มต้นในสองชีตแล้ว · ย้าย ${count} ริง`);
       } else setMessage('เชื่อมต่อแล้ว มีข้อมูลในชีตอยู่ก่อน กรุณาเลือกอัปโหลดข้อมูลในเครื่องหรือดึงข้อมูลจากชีต');
     }
@@ -47,6 +47,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
     queueRecordChanges([...ringLogs, ...plans], 'save');
     const count = await flushPendingRecords();
     await uploadProjectState();
+    onConnectionChange(true);
     setMessage(`ส่งข้อมูลริง ${count} รายการ พร้อมแนวอุโมงค์และค่าตั้งค่าไปยังชีตแล้ว`);
   });
 
@@ -54,10 +55,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
     await flushPendingRecords();
     const [snapshot, state] = await Promise.all([fetchSheetSnapshot(), fetchProjectState()]);
     if (!snapshot.records.length && !snapshot.deletedIds.length && !state) { setMessage('ชีตยังไม่มีข้อมูลสำหรับดึง'); return; }
-    const merged = new Map([...ringLogs, ...plans].map(record => [recordIdentity(record), record]));
-    for (const id of snapshot.deletedIds) merged.delete(id);
-    for (const record of snapshot.records) merged.set(recordIdentity(record), record);
-    const all = [...merged.values()];
+    const all = snapshot.records;
     localStorage.setItem('tbm_sheet_before_pull_records', JSON.stringify({ savedAt: new Date().toISOString(), ringLogs, plans }));
     localStorage.setItem('tbm_ring_logs', JSON.stringify(all.filter(record => recordKind(record) !== 'planned')));
     localStorage.setItem('tbm_saved_plans', JSON.stringify(all.filter(record => recordKind(record) === 'planned')));
@@ -86,7 +84,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
           <button className="btn btn-outline" disabled={working} onClick={() => { disconnectSheets(); setConnected(false); onConnectionChange(false); setMessage('ออกจากการเชื่อมต่อแล้ว'); }}>ตัดการเชื่อมต่อ</button>
         </>}
       </div>
-      <p className="sheets-footnote">เว็บบันทึกในเครื่องก่อนเสมอ ถ้าชีตยังว่าง ระบบจะย้ายข้อมูลเริ่มต้นให้อัตโนมัติ หากชีตมีข้อมูลอยู่แล้วให้เลือกว่าจะอัปโหลดหรือดึงก่อนซิงก์ต่อ</p>
+      <p className="sheets-footnote">หลังเชื่อมต่อ เว็บจะตรวจและซิงก์ข้อมูลเพิ่ม แก้ไข และลบกับทั้งสองชีตอัตโนมัติทุกประมาณ 5 วินาที การลบจากหน้าเว็บจะลบแถวจริงในแท็บ Records ของชีตเครื่องนั้นด้วย</p>
     </section>
   </div>;
 }

@@ -32,6 +32,7 @@ test('Google Sheets sync batches writes to the correct machine files', async () 
   const original = { window: globalThis.window, localStorage: globalThis.localStorage, fetch: globalThis.fetch };
   const values = new Map();
   const calls = [];
+  let deleting = false;
   globalThis.localStorage = {
     getItem: key => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
@@ -43,6 +44,8 @@ test('Google Sheets sync batches writes to the correct machine files', async () 
   } } } };
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options });
+    if (deleting && url.includes('Records!A2%3AA')) return new Response(JSON.stringify({ values: [['planned:EB:1']] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (deleting && url.includes('fields=sheets.properties')) return new Response(JSON.stringify({ sheets: [{ properties: { sheetId: 123, title: 'Records' } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     return new Response(JSON.stringify({ values: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   try {
@@ -72,6 +75,12 @@ test('Google Sheets sync batches writes to the correct machine files', async () 
     assert.ok(!eb.some(row => row[0] === 'tbm_advance_session_WB'));
     assert.ok(wb.some(row => row[0] === 'tbm_advance_session_WB'));
     assert.equal(JSON.parse(wb.find(row => row[0] === 'tbm_soil_levels')[2]).WB, 38);
+    deleting = true;
+    queueRecordChanges([{ ringNum: 'R0001', recordType: 'planned', track: 'EB', key: 'R2' }], 'delete');
+    assert.equal(await flushPendingRecords(), 1);
+    const physicalDelete = calls.find(call => call.url.includes(`${config.sheetIdEB}:batchUpdate`) && JSON.parse(call.options.body).requests?.[0]?.deleteDimension);
+    assert.equal(JSON.parse(physicalDelete.options.body).requests[0].deleteDimension.range.sheetId, 123);
+    assert.deepEqual(JSON.parse(physicalDelete.options.body).requests[0].deleteDimension.range, { sheetId:123, dimension:'ROWS', startIndex:1, endIndex:2 });
     disconnectSheets();
   } finally {
     globalThis.window = original.window;

@@ -13,7 +13,7 @@ import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
 import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, parseSTA } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
-import { soilAt, soilSheetAt, soilLevelAtStation, stationMeters } from '../services/soilProfile';
+import { soilAt, soilSheetAt, tunnelElevationAt } from '../services/soilProfile';
 
 
 
@@ -23,14 +23,6 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const lastRing = latestMeasured(trackRingLogs) || trackRingLogs.at(-1) || null;
   const [savedSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`)) || {}; }
-    catch { return {}; }
-  });
-  const [soilElevations] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('tbm_soil_levels')) || { EB:'', WB:'' }; }
-    catch { return { EB:'', WB:'' }; }
-  });
-  const [soilLevelStations] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('tbm_soil_level_stations')) || {}; }
     catch { return {}; }
   });
 
@@ -86,10 +78,6 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [startHLead, setStartHLead] = useState(savedSession.startHLead ?? (lastRing ? lastRing.hLead : 0));
   const [startVLead, setStartVLead] = useState(savedSession.startVLead ?? (lastRing ? lastRing.vLead : 0));
   const [currentSTA, setCurrentSTA] = useState(savedSession.currentSTA ?? (sections[0]?.startSTA || ''));
-  const effectiveSoilElevations = {
-    EB:soilLevelAtStation(soilElevations,soilLevelStations,'EB',currentSTA),
-    WB:soilLevelAtStation(soilElevations,soilLevelStations,'WB',currentSTA),
-  };
   const [recovery, setRecovery] = useState(savedSession.recovery ? {...DEFAULT_RECOVERY,...savedSession.recovery} : {...DEFAULT_RECOVERY});
   const [maxTolerance, setMaxTolerance] = useState(savedSession.maxTolerance ?? 55.0);
   const [steeringSign, setSteeringSign] = useState(savedSession.steeringSign || 'steering_bias'); // 'steering_bias' (Right = -)
@@ -106,11 +94,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [inputErrors, setInputErrors] = useState([]);
   const [saving, setSaving] = useState(false);
   const soilForPlannedRing = ring => {
-    const ringSTA = stationMeters(ring.sta);
-    const inputSTA = stationMeters(currentSTA);
-    return ringSTA !== null && inputSTA !== null && Math.abs(ringSTA - inputSTA) < 0.5
-      ? soilAt(ring.sta, track, effectiveSoilElevations[track])
-      : { status:'needs-ring-elevation', sheet:soilSheetAt(ring.sta, track) };
+    const point=tunnelElevationAt(ring.sta,track);
+    return point ? soilAt(ring.sta,track,point.elevation) : { status:'outside',sheet:soilSheetAt(ring.sta,track) };
   };
 
   useEffect(() => {
@@ -309,7 +294,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     ];
 
     const rows = planResult.plannedRings.map((r) => [
-      track, Math.abs((stationMeters(r.sta) ?? -1e9) - (stationMeters(currentSTA) ?? 1e9)) < 0.5 ? effectiveSoilElevations[track] : '',
+      track, tunnelElevationAt(r.sta,track)?.elevation ?? '',
       soilForPlannedRing(r).soil?.english || '', soilForPlannedRing(r).status, soilForPlannedRing(r).sheet?.drawing || '',
       r.step,
       r.sta,
@@ -359,7 +344,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         <button className="btn btn-outline" onClick={handleBatchSave} disabled={needsRecalc||saving||!planResult.plannedRings.length}>{saving?'กำลังบันทึก…':'เก็บเป็นแผนคาดการณ์'}</button>
       </>}/>
       <ValidationErrors errors={inputErrors}/>
-      <p className="section-note">แผน {track} เก็บค่าตั้งต้นและช่วง Alignment แยกจากอีกแนว · ดูชั้นดิน EB/WB และกรอกระดับ mRL ได้ที่หน้า “ข้อมูลชั้นดิน” · ค่า Alignment เดิมใน Master Settings เป็นเพียงต้นแบบ ต้องตรวจให้ตรงแบบโครงการ</p>
+      <p className="section-note">แผน {track} เก็บค่าตั้งต้นและช่วง Alignment แยกจากอีกแนว · ชั้นดินและระดับ mRL ช่วง OR10–TCC อ่านจากแบบตาม STA ของแต่ละริงโดยอัตโนมัติ · ค่า Alignment เดิมใน Master Settings เป็นเพียงต้นแบบ ต้องตรวจให้ตรงแบบโครงการ</p>
       {needsRecalc && <InsightPanel level="warning" title="ข้อมูลเปลี่ยนแล้ว ผลด้านล่างเป็นแผนก่อนแก้ไข"><p>คำนวณใหม่ก่อนส่งออกหรือบันทึกแผน</p></InsightPanel>}
       {appliedSuccess && (
         <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl text-sm font-medium">
