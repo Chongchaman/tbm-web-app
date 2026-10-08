@@ -15,8 +15,12 @@ export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   // LocalStorage State for Horizontal Alignment
   const [hSections, setHSections] = useState(() => {
     try {
-      const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`) || localStorage.getItem('tbm_horizontal_alignment');
+      const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`);
       if (saved) return JSON.parse(saved);
+      const session = JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`) || '{}');
+      if (Array.isArray(session.sections) && session.sections.length) return session.sections;
+      const legacy = localStorage.getItem('tbm_horizontal_alignment');
+      if (legacy) return JSON.parse(legacy);
     } catch (e) {
       console.error(e);
     }
@@ -26,8 +30,12 @@ export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   // LocalStorage State for Vertical Alignment
   const [vProfile, setVProfile] = useState(() => {
     try {
-      const saved = localStorage.getItem(`tbm_vertical_alignment_${track}`) || localStorage.getItem('tbm_vertical_alignment');
+      const saved = localStorage.getItem(`tbm_vertical_alignment_${track}`);
       if (saved) return JSON.parse(saved);
+      const session = JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`) || '{}');
+      if (Array.isArray(session.vProfile) && session.vProfile.length) return session.vProfile;
+      const legacy = localStorage.getItem('tbm_vertical_alignment');
+      if (legacy) return JSON.parse(legacy);
     } catch (e) {
       console.error(e);
     }

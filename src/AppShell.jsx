@@ -107,13 +107,16 @@ export default function AppShell() {
       if(errors.length) throw new Error(errors.join(' · '));
       if(new Set(normalized.map(identity)).size!==normalized.length) throw new Error('มีหมายเลขริงซ้ำในรายการที่บันทึก');
       const fieldRecords=normalized.filter(r=>recordKind(r)!=='planned');
+      if(new Set(fieldRecords.map(r=>`${r.track}:${ringNumber(r)}`)).size!==fieldRecords.length) throw new Error('มีหมายเลขริงซ้ำในข้อมูลสนามของเครื่องเดียวกัน');
       if(fieldRecords.some(next=>logsRef.current.some(old=>ringNumber(old)===ringNumber(next) && old.track===next.track && old!==existing && identity(old)!==identity(existing||{})))) throw new Error('หมายเลขริงของเครื่องนี้มีอยู่แล้ว กรุณาแก้ไขรายการเดิมในประวัติ');
       if(existing && (ringNumber(existing)!==ringNumber(normalized[0]) || (existing.track||'EB')!==normalized[0].track)) throw new Error('แก้หมายเลขริงหรือเครื่องเจาะไม่ได้ กรุณาเพิ่มรายการใหม่');
       const nextPlans=normalized.filter(r=>recordKind(r)==='planned');
+      if(existing && identity(existing)!==identity(normalized[0])) queueRecordChanges([existing],'delete');
       queueRecordChanges(normalized,'save');
       if(nextPlans.length) setPlans(prev=>sortRings([...prev.filter(old=>!nextPlans.some(next=>identity(next)===identity(old))),...nextPlans]));
-      if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>identity(next)===identity(old))),...fieldRecords]));
+      if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>next.track===old.track&&ringNumber(next)===ringNumber(old))),...fieldRecords]));
       if(existing && recordKind(existing)==='planned' && fieldRecords.length) setPlans(prev=>prev.filter(r=>identity(r)!==identity(existing)));
+      if(existing && recordKind(existing)!=='planned' && nextPlans.length) setRingLogs(prev=>prev.filter(r=>identity(r)!==identity(existing)));
       if(connected && localStorage.getItem('tbm_google_sheets_migrated')==='1') {
         try { await flushPendingRecords(); setCloudState('live'); setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องและ Google Sheet แล้ว`}); }
         catch(error) {setCloudState('error');setNotice({level:'warning',text:`บันทึกในเครื่องแล้ว · รอส่งไป Google Sheet (${error.message})`});}
