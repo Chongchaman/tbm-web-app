@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { LayoutDashboard, Calculator, Sparkles, Compass, History, Database, Droplets, HardHat, Building2, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Calculator, Sparkles, Compass, Map as MapIcon, History, Database, Droplets, HardHat, Building2, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen } from 'lucide-react';
 const AdvancePlannerView = lazy(() => import('./views/AdvancePlannerView'));
+const TunnelPositionView = lazy(() => import('./views/TunnelPositionView'));
 const AutoPlannerView = lazy(() => import('./views/AutoPlannerView'));
 const PlannerView = lazy(() => import('./views/PlannerView'));
 const DashboardView = lazy(() => import('./views/DashboardView'));
@@ -17,9 +18,11 @@ import { isSupabaseConfigured } from './services/supabaseClient';
 import { fetchRingLogsFromCloud, batchSaveRingLogsToCloud, batchDeleteRingLogsFromCloud, subscribeToRealtimeRings } from './services/supabaseService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
+import { tbmMode } from './services/tbmMode';
 
 const menus = [
   { id:'advanceplanner', label:'วางแผนแนวอุโมงค์', icon:Compass, group:'วางแผนและตรวจค่า' },
+  { id:'position', label:'ภาพตำแหน่งหัวเจาะ', icon:MapIcon },
   { id:'planning', label:'คำนวณริงเดี่ยว', icon:Calculator },
   { id:'autoplanner', label:'วางแผนต่อเนื่อง', icon:Sparkles },
   { id:'dashboard', label:'ภาพรวมโครงการ', icon:LayoutDashboard, group:'ติดตามและจัดการ' },
@@ -119,7 +122,7 @@ export default function AppShell() {
   },[configured]);
 
   const navigate=(tab,filter='all')=>{setActiveTab(tab);setHistoryFilter(filter);setSidebarOpen(false);window.scrollTo({top:0,behavior:'instant'});};
-  const changeAdvanceTrack=value=>{setAdvanceTrack(value);try{localStorage.setItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
+  const changeAdvanceTrack=value=>{if(!['EB','WB'].includes(value))return;setAdvanceTrack(value);try{localStorage.setItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
   async function writeRecords(records, existing=null) {
     if(busy.current) throw new Error('กำลังบันทึกข้อมูล กรุณารอสักครู่');
     busy.current=true;
@@ -154,20 +157,21 @@ export default function AppShell() {
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),soilLevels:readStored('tbm_soil_levels',{})},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),singleEB:readStored('tbm_single_session_EB',{}),singleWB:readStored('tbm_single_session_WB',{}),singleTypesEB:readStored('tbm_single_types_EB',[]),singleTypesWB:readStored('tbm_single_types_WB',[]),sequenceEB:readStored('tbm_sequence_session_EB',{}),sequenceWB:readStored('tbm_sequence_session_WB',{}),sequenceTypesEB:readStored('tbm_sequence_types_EB',[]),sequenceTypesWB:readStored('tbm_sequence_types_WB',[]),soilLevels:readStored('tbm_soil_levels',{}),soilLevelStations:readStored('tbm_soil_level_stations',{})},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`tbm-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const active=menus.find(m=>m.id===activeTab);
   return <ErrorBoundary><a className="skip-link" href="#main-content">ข้ามไปเนื้อหา</a><div className="app-shell">
     {sidebarOpen && <button className="sidebar-overlay" aria-label="ปิดเมนู" onClick={()=>setSidebarOpen(false)} />}
     <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.length+plans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>ฐานข้อมูล Cloud<small style={{display:'block'}}>{!configured?'ใช้ข้อมูลในเครื่อง':cloudState==='live'?'Realtime เชื่อมต่อแล้ว':cloudState==='loaded'?'อ่าน Cloud แล้ว · รอ Realtime':cloudState==='error'?'เชื่อมต่อมีปัญหา':'กำลังตรวจการเชื่อมต่อ'}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
-    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions"><button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
+    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions">{['advanceplanner','position','planning','autoplanner'].includes(activeTab)&&<div className="topbar-tbm-switch" role="group" aria-label="เลือกเครื่องเจาะ">{['EB','WB'].map(value=><button key={value} aria-pressed={advanceTrack===value} onClick={()=>changeAdvanceTrack(value)}>{tbmMode(value).machine}<small>{value}</small></button>)}</div>}<button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
     <main className="app-content" id="main-content">
       {notice && <div className={`notice-toast status-${notice.level}`} role="status"><span>{notice.text}</span><button className="icon-button" aria-label="ปิดข้อความ" onClick={()=>setNotice(null)}><X size={16}/></button></div>}
       <Suspense fallback={<div className="empty-state" role="status">กำลังเปิดหน้าจอ…</div>}>
       {activeTab==='advanceplanner' && <AdvancePlannerView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} onNavigate={navigate} theme={theme}/>}
-      {activeTab==='planning' && <PlannerView ringLogs={ringLogs} onSaveRing={record=>writeRecords([{...record,recordType:'planned'}])} theme={theme}/>}
-      {activeTab==='autoplanner' && <AutoPlannerView ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} theme={theme}/>}
+      {activeTab==='position' && <TunnelPositionView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} onNavigate={navigate}/>}
+      {activeTab==='planning' && <PlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} onSaveRing={record=>writeRecords([{...record,track:advanceTrack,recordType:'planned'}])} theme={theme}/>}
+      {activeTab==='autoplanner' && <AutoPlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} onBatchSave={records=>writeRecords(records.map(r=>({...r,track:advanceTrack,recordType:'planned'})))} theme={theme}/>}
       {activeTab==='dashboard' && <DashboardView ringLogs={ringLogs} plans={plans} onNavigate={navigate} theme={theme}/>}
       {activeTab==='history' && <HistoryLogView ringLogs={sortRings([...ringLogs,...plans])} initialFilter={historyFilter} onUpdateRing={(existing,record)=>writeRecords([record],existing)} onAddRing={record=>writeRecords([record])} onBatchDelete={removeRecords}/>}
       {activeTab==='consumables' && <ConsumablesView ringLogs={ringLogs}/>}

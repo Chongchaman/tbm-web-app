@@ -13,7 +13,7 @@ export default function SoilProfilePanel({ station, track, onTrackChange, elevat
         <p className="section-note">แผน EB และ WB แยกกัน · หน้าตัดชั้นดินด้านล่างอ่านจากแบบโครงการตาม STA และระดับ mRL</p></div>
       <div className="soil-track-switch" role="group" aria-label="เลือกแนวสำหรับวางแผน">
         {SOIL_TRACKS.map(value => <button key={value} type="button" className="btn btn-outline" aria-pressed={track === value}
-          onClick={() => onTrackChange(value)}>แผนแนว {value}</button>)}
+          onClick={() => onTrackChange(value)}>{value === 'EB' ? 'TBM1 · EB' : 'TBM2 · WB'}</button>)}
       </div>
     </div>
     <div className="soil-track-grid">{SOIL_TRACKS.map(value => {

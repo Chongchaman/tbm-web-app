@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Save, RotateCcw } from 'lucide-react';
 import { PageHeader, Field, InsightPanel, StatusBadge, ValidationErrors, EmptyState } from '../components/PlannerUI';
 import RingDiagram from '../components/RingDiagram';
@@ -8,14 +8,15 @@ import { DEFAULT_GAP_SETTINGS } from '../services/advancePlanner';
 import { evaluateCandidates } from '../services/smartCandidates';
 import { latestMeasured, nextRingNumber, recordKind, RECORD_LABELS, readStored, finite } from '../services/decisionSupport';
 
-export default function SingleRingPlanner({ ringLogs=[],onSaveRing=async()=>{} }) {
+export default function SingleRingPlanner({ ringLogs=[],onSaveRing=async()=>{},track='EB' }) {
   const baseline=latestMeasured(ringLogs)||ringLogs.at(-1);
-  const [form,setForm]=useState(()=>({ringNum:nextRingNumber(ringLogs),beforeKey:baseline?.key||'R13',h:baseline?.hLead??0,v:baseline?.vLead??0,alignment:'straight',radius:500,targetH:0,targetV:0,roll:0,custom:false,curveH:0,curveV:0,notes:''}));
+  const [form,setForm]=useState(()=>readStored(`tbm_single_session_${track}`,{ringNum:nextRingNumber(ringLogs),beforeKey:baseline?.key||'R13',h:baseline?.hLead??0,v:baseline?.vLead??0,alignment:'straight',radius:500,targetH:0,targetV:0,roll:0,custom:false,curveH:0,curveV:0,notes:''}));
   const [selected,setSelected]=useState(null);
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState('');
   const [filter,setFilter]=useState('all');
-  const [allowedTypes,setAllowedTypes]=useState(['U','R','L']);
+  const [allowedTypes,setAllowedTypes]=useState(()=>readStored(`tbm_single_types_${track}`,['U','R','L']));
+  useEffect(()=>{try{localStorage.setItem(`tbm_single_session_${track}`,JSON.stringify(form));localStorage.setItem(`tbm_single_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
   const [gapSettings]=useState(()=>readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS));
   const update=(key,value)=>{setForm(prev=>({...prev,[key]:value}));setMessage('');};
   const errors=[];
@@ -30,10 +31,10 @@ export default function SingleRingPlanner({ ringLogs=[],onSaveRing=async()=>{} }
   const save=async()=>{
     if(!active || saving) return;
     setSaving(true);setMessage('');
-    try {await onSaveRing({ringNum:form.ringNum,key:active.key,hLead:active.afterHLead,vLead:active.afterVLead,gapT:active.gapT,gapB:active.gapB,gapL:active.gapL,gapR:active.gapR,roll:Number(form.roll),pitch:0,recordType:'planned',suitability:active.suitability,timestamp:new Date().toISOString(),notes:`Planned with Before Key ${form.beforeKey} · Allowed Segment ${['U','R','L'].filter(type=>allowedTypes.includes(type)).join('/')} · ${active.reason}${form.notes?' · '+form.notes:''}`});setMessage(`บันทึกแผน ${form.ringNum} แล้ว เปิดประวัติเพื่อกรอกค่าตรวจสนาม`);} catch(error){setMessage(error.message);} finally {setSaving(false);}
+    try {await onSaveRing({ringNum:form.ringNum,track,key:active.key,hLead:active.afterHLead,vLead:active.afterVLead,gapT:active.gapT,gapB:active.gapB,gapL:active.gapL,gapR:active.gapR,roll:Number(form.roll),pitch:0,recordType:'planned',suitability:active.suitability,timestamp:new Date().toISOString(),notes:`Planned with Before Key ${form.beforeKey} · Allowed Segment ${['U','R','L'].filter(type=>allowedTypes.includes(type)).join('/')} · ${active.reason}${form.notes?' · '+form.notes:''}`});setMessage(`บันทึกแผน ${form.ringNum} แล้ว เปิดประวัติเพื่อกรอกค่าตรวจสนาม`);} catch(error){setMessage(error.message);} finally {setSaving(false);}
   };
   const useNext=()=>{if(!active)return;update('beforeKey',active.key);update('h',active.afterHLead);update('v',active.afterVLead);update('ringNum',nextRingNumber([{ringNum:form.ringNum}]));setSelected(null);};
-  return <div className="stack"><PageHeader eyebrow="Single ring · Decision support" title="เลือกคีย์และตรวจค่าริงเดี่ยว" description="จัดอันดับจาก Suitability, Lead, Gap คาดการณ์ และทางเลือกของริงถัดไป พร้อมเหตุผลที่ตรวจสอบได้" actions={<button className="btn btn-outline" onClick={()=>{if(!baseline)return;setForm(prev=>({...prev,beforeKey:baseline.key,h:baseline.hLead,v:baseline.vLead,ringNum:nextRingNumber(ringLogs)}));setSelected(null);}}><RotateCcw size={16}/>ใช้ข้อมูลอ้างอิงล่าสุด</button>}/>
+  return <div className="stack"><PageHeader eyebrow={`Single ring · ${track==='EB'?'TBM1':'TBM2'} · Decision support`} title={`เลือกคีย์และตรวจค่าริงเดี่ยว ${track==='EB'?'TBM1 (EB)':'TBM2 (WB)'}`} description="จัดอันดับจาก Suitability, Lead, Gap คาดการณ์ และทางเลือกของริงถัดไป พร้อมเหตุผลที่ตรวจสอบได้" actions={<button className="btn btn-outline" onClick={()=>{if(!baseline)return;setForm(prev=>({...prev,beforeKey:baseline.key,h:baseline.hLead,v:baseline.vLead,ringNum:nextRingNumber(ringLogs)}));setSelected(null);}}><RotateCcw size={16}/>ใช้ข้อมูลอ้างอิงล่าสุด</button>}/>
     <div className="workspace-grid"><section className="stack"><div className="card"><div className="section-heading"><h3>ข้อมูลก่อนวางริง</h3><span className="source-label">{baseline?RECORD_LABELS[recordKind(baseline)]:'ยังไม่มีข้อมูลสนาม'}</span></div><div className="form-grid">
       <Field label="หมายเลขริง"><input value={form.ringNum} onChange={e=>update('ringNum',e.target.value)}/></Field>
       <Field label="คีย์ก่อนหน้า"><select value={form.beforeKey} onChange={e=>{update('beforeKey',e.target.value);setSelected(null);}}>{Object.keys(KEY_DATA).map(key=><option key={key}>{key}</option>)}</select></Field>

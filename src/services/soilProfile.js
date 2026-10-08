@@ -18,6 +18,13 @@ export function stationMeters(value) {
   return /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : null;
 }
 
+export function soilLevelAtStation(levels, stations, track, station) {
+  const savedStation = stationMeters(stations?.[track]);
+  const requestedStation = stationMeters(station);
+  return savedStation !== null && requestedStation !== null && Math.abs(savedStation - requestedStation) < 0.5
+    ? levels?.[track] ?? '' : '';
+}
+
 export function soilSheetAt(station, track) {
   const meters = stationMeters(station);
   if (meters === null || !SOIL_TRACKS.includes(track)) return null;
