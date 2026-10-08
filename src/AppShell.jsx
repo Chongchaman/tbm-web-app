@@ -16,6 +16,7 @@ import { INITIAL_RING_LOGS } from './data/tbmConstants';
 import { isSupabaseConfigured } from './services/supabaseClient';
 import { fetchRingLogsFromCloud, batchSaveRingLogsToCloud, batchDeleteRingLogsFromCloud, subscribeToRealtimeRings } from './services/supabaseService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
+import { recordIdentity as identity } from './services/recordIdentity';
 
 const menus = [
   { id:'advanceplanner', label:'วางแผนแนวอุโมงค์', icon:Compass, group:'วางแผนและตรวจค่า' },
@@ -28,11 +29,11 @@ const menus = [
   { id:'guide', label:'คู่มือการใช้งาน', icon:BookOpen },
 ];
 const sortRings = rings => [...rings].sort((a,b) => ringNumber(a)-ringNumber(b));
-const identity = ring => `${recordKind(ring)}:${ringNumber(ring)}`;
 const canonical = ring => ({ ...ring, ringNum:`R${String(ringNumber(ring)).padStart(4,'0')}`, ringNumber:ringNumber(ring), recordType:recordKind(ring) });
 
 export default function AppShell() {
   const [activeTab,setActiveTab] = useState('advanceplanner');
+  const [advanceTrack,setAdvanceTrack] = useState(() => readStored('tbm_advance_track','EB') === 'WB' ? 'WB' : 'EB');
   const [sidebarOpen,setSidebarOpen] = useState(false);
   const [cloudModal,setCloudModal] = useState(false);
   const [preferences,setPreferences] = useState(false);
@@ -53,7 +54,7 @@ export default function AppShell() {
     const saved = readStored('tbm_saved_plans',[]);
     const legacy = readStored('tbm_ring_logs',[]);
     const migrated = Array.isArray(legacy) ? legacy.filter(r=>recordKind(r)==='planned') : [];
-    return sortRings([...new Map([...(Array.isArray(saved)?saved:[]),...migrated].map(r=>[ringNumber(r),canonical({...r,recordType:'planned'})])).values()]);
+    return sortRings([...new Map([...(Array.isArray(saved)?saved:[]),...migrated].map(r=>{const plan=canonical({...r,recordType:'planned'});return [identity(plan),plan];})).values()]);
   });
   const busy = useRef(false);
   const logsRef = useRef(ringLogs);
@@ -98,7 +99,7 @@ export default function AppShell() {
     const upsert = ring => {
       if(!active) return;
       const next=canonical(ring); changed.add(ringNumber(next));
-      if(recordKind(next)==='planned') setPlans(prev=>sortRings([...prev.filter(r=>ringNumber(r)!==ringNumber(next)),next]));
+      if(recordKind(next)==='planned') setPlans(prev=>sortRings([...prev.filter(r=>identity(r)!==identity(next)),next]));
       else setRingLogs(prev=>sortRings([...prev.filter(r=>ringNumber(r)!==ringNumber(next)),next]));
     };
     const stop=subscribeToRealtimeRings(upsert,upsert,num=>{
@@ -111,13 +112,14 @@ export default function AppShell() {
       const remote=(res.data||[]).map(canonical);
       const remoteNumbers=new Set(remote.filter(r=>recordKind(r)!=='planned').map(ringNumber));
       setRingLogs(prev=>sortRings([...prev.filter(r=>!remoteNumbers.has(ringNumber(r)) || changed.has(ringNumber(r))),...remote.filter(r=>recordKind(r)!=='planned' && !changed.has(ringNumber(r)))]));
-      setPlans(prev=>sortRings([...new Map([...remote.filter(r=>recordKind(r)==='planned'),...prev].map(r=>[ringNumber(r),r])).values()]));
+      setPlans(prev=>sortRings([...new Map([...remote.filter(r=>recordKind(r)==='planned'),...prev].map(r=>[identity(r),r])).values()]));
       setCloudState(previous=>previous==='live'?'live':'loaded');
     });
     return ()=>{active=false;stop?.();};
   },[configured]);
 
   const navigate=(tab,filter='all')=>{setActiveTab(tab);setHistoryFilter(filter);setSidebarOpen(false);window.scrollTo({top:0,behavior:'instant'});};
+  const changeAdvanceTrack=value=>{setAdvanceTrack(value);try{localStorage.setItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
   async function writeRecords(records, existing=null) {
     if(busy.current) throw new Error('กำลังบันทึกข้อมูล กรุณารอสักครู่');
     busy.current=true;
@@ -134,9 +136,9 @@ export default function AppShell() {
         if(res.error) {setCloudState('error');throw new Error(`Cloud ไม่ยืนยันการบันทึก: ${res.error}`);}
       }
       const nextPlans=normalized.filter(r=>recordKind(r)==='planned');
-      if(nextPlans.length) setPlans(prev=>sortRings([...prev.filter(old=>!nextPlans.some(next=>ringNumber(next)===ringNumber(old))),...nextPlans]));
+      if(nextPlans.length) setPlans(prev=>sortRings([...prev.filter(old=>!nextPlans.some(next=>identity(next)===identity(old))),...nextPlans]));
       if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>ringNumber(next)===ringNumber(old))),...fieldRecords]));
-      if(existing && recordKind(existing)==='planned' && fieldRecords.length) setPlans(prev=>prev.filter(r=>ringNumber(r)!==ringNumber(existing)));
+      if(existing && recordKind(existing)==='planned' && fieldRecords.length) setPlans(prev=>prev.filter(r=>identity(r)!==identity(existing)));
       setNotice({level:'normal',text:nextPlans.length?`บันทึกแผนคาดการณ์ ${nextPlans.length} ริงในเครื่องแล้ว · แยกจากข้อมูลสนาม`:`บันทึก ${fieldRecords.length} รายการ${configured?' และ Cloud ยืนยันแล้ว':'ในเครื่องแล้ว'}`});
     } catch(error) {setNotice({level:'critical',text:error.message});throw error;} finally {busy.current=false;}
   }
@@ -152,7 +154,7 @@ export default function AppShell() {
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{})},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),soilLevels:readStored('tbm_soil_levels',{})},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`tbm-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const active=menus.find(m=>m.id===activeTab);
@@ -163,7 +165,7 @@ export default function AppShell() {
     <main className="app-content" id="main-content">
       {notice && <div className={`notice-toast status-${notice.level}`} role="status"><span>{notice.text}</span><button className="icon-button" aria-label="ปิดข้อความ" onClick={()=>setNotice(null)}><X size={16}/></button></div>}
       <Suspense fallback={<div className="empty-state" role="status">กำลังเปิดหน้าจอ…</div>}>
-      {activeTab==='advanceplanner' && <AdvancePlannerView ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} onNavigate={navigate} theme={theme}/>}
+      {activeTab==='advanceplanner' && <AdvancePlannerView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} onNavigate={navigate} theme={theme}/>}
       {activeTab==='planning' && <PlannerView ringLogs={ringLogs} onSaveRing={record=>writeRecords([{...record,recordType:'planned'}])} theme={theme}/>}
       {activeTab==='autoplanner' && <AutoPlannerView ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} theme={theme}/>}
       {activeTab==='dashboard' && <DashboardView ringLogs={ringLogs} plans={plans} onNavigate={navigate} theme={theme}/>}
@@ -174,6 +176,6 @@ export default function AppShell() {
       </Suspense>
     </main></div></div>
     {preferences && <AppearanceSettings settings={appearance} onSave={saveAppearance} onClose={()=>setPreferences(false)} />}
-    {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');}}/>}
+    {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[identity(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');}}/>}
   </ErrorBoundary>;
 }

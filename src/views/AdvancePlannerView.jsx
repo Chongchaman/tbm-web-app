@@ -3,7 +3,7 @@ import LeadChart from '../components/LeadChart';
 import RecoveryChart from '../components/RecoveryChart';
 import { DEFAULT_RECOVERY } from '../services/alignmentRecovery';
 import { latestMeasured, nextRingNumber, ringNumber, summarizeRings, getLimits, assessRing, exportCSV, validateAlignment, validatePlanningInput } from '../services/decisionSupport';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles, Layers, Sliders, TrendingUp, CheckCircle2, Download, Plus, Trash2, SlidersHorizontal, RotateCcw, Eye, Save, Lock, Lightbulb } from 'lucide-react';
 
 
@@ -12,15 +12,27 @@ import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
 import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, parseSTA } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
+import SoilProfilePanel from '../components/SoilProfilePanel';
+import { soilAt, soilSheetAt, stationMeters } from '../services/soilProfile';
 
 
 
 
-export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {}, onNavigate = () => {}, theme = 'dark' }) {
-  const lastRing = latestMeasured(ringLogs) || ringLogs.at(-1) || null;
+export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => {}, onNavigate = () => {}, theme = 'dark', track = 'EB', onTrackChange = () => {} }) {
+  const trackRingLogs = ringLogs.filter(r => r.track === track);
+  const lastRing = latestMeasured(trackRingLogs) || trackRingLogs.at(-1) || null;
+  const [savedSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`)) || {}; }
+    catch { return {}; }
+  });
+  const [soilElevations, setSoilElevations] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('tbm_soil_levels')) || { EB:'', WB:'' }; }
+    catch { return { EB:'', WB:'' }; }
+  });
 
   // Sections State (Dynamic CRUD & LocalStorage sync with safe fallback)
   const [sections, setSections] = useState(() => {
+    if (Array.isArray(savedSession.sections) && savedSession.sections.length) return savedSession.sections;
     try {
       const saved = localStorage.getItem('tbm_horizontal_alignment');
       if (saved) {
@@ -34,6 +46,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   });
 
   const [vProfile, setVProfile] = useState(() => {
+    if (Array.isArray(savedSession.vProfile) && savedSession.vProfile.length) return savedSession.vProfile;
     try {
       const saved = localStorage.getItem('tbm_vertical_alignment');
       if (saved) {
@@ -47,7 +60,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   });
 
   // Strategy Mode: 'senior_ai' (Free Ratio + Gap Safe) | 'auto_ratio' | 'ratio_guided'
-  const [strategy, setStrategy] = useState('senior_ai');
+  const [strategy, setStrategy] = useState(savedSession.strategy || 'senior_ai');
 
   // Tail Gap Configuration
   const [gapSettings] = useState(() => {
@@ -65,13 +78,13 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   const [isSectionConfigExpanded, setIsSectionConfigExpanded] = useState(false);
 
-  const [startKey, setStartKey] = useState(lastRing ? lastRing.key : 'U4');
-  const [startHLead, setStartHLead] = useState(lastRing ? lastRing.hLead : 0);
-  const [startVLead, setStartVLead] = useState(lastRing ? lastRing.vLead : 0);
-  const [currentSTA, setCurrentSTA] = useState(sections[0]?.startSTA || '');
-  const [recovery, setRecovery] = useState({...DEFAULT_RECOVERY});
-  const [maxTolerance, setMaxTolerance] = useState(55.0);
-  const [steeringSign, setSteeringSign] = useState('steering_bias'); // 'steering_bias' (Right = -)
+  const [startKey, setStartKey] = useState(savedSession.startKey ?? (lastRing ? lastRing.key : 'U4'));
+  const [startHLead, setStartHLead] = useState(savedSession.startHLead ?? (lastRing ? lastRing.hLead : 0));
+  const [startVLead, setStartVLead] = useState(savedSession.startVLead ?? (lastRing ? lastRing.vLead : 0));
+  const [currentSTA, setCurrentSTA] = useState(savedSession.currentSTA ?? (sections[0]?.startSTA || ''));
+  const [recovery, setRecovery] = useState(savedSession.recovery ? {...DEFAULT_RECOVERY,...savedSession.recovery} : {...DEFAULT_RECOVERY});
+  const [maxTolerance, setMaxTolerance] = useState(savedSession.maxTolerance ?? 55.0);
+  const [steeringSign, setSteeringSign] = useState(savedSession.steeringSign || 'steering_bias'); // 'steering_bias' (Right = -)
   const [activeSubTab, setActiveSubTab] = useState('2d_map'); // '2d_map' | 'trajectory_chart' | 'table'
 
   // Explicit Calculation Trigger State
@@ -84,11 +97,28 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [resultFilter, setResultFilter] = useState('all');
   const [inputErrors, setInputErrors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const soilForPlannedRing = ring => {
+    const ringSTA = stationMeters(ring.sta);
+    const inputSTA = stationMeters(currentSTA);
+    return ringSTA !== null && inputSTA !== null && Math.abs(ringSTA - inputSTA) < 0.5
+      ? soilAt(ring.sta, track, soilElevations[track])
+      : { status:'needs-ring-elevation', sheet:soilSheetAt(ring.sta, track) };
+  };
+
+  useEffect(() => {
+    try { localStorage.setItem(`tbm_advance_session_${track}`, JSON.stringify({ sections, vProfile, strategy,
+      startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign })); }
+    catch (error) { console.error('Cannot save track planning session', error); }
+  }, [track, sections, vProfile, strategy, startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign]);
+  useEffect(() => {
+    try { localStorage.setItem('tbm_soil_levels', JSON.stringify(soilElevations)); }
+    catch (error) { console.error('Cannot save soil levels', error); }
+  }, [soilElevations]);
 
   // Plan Calculation State (Safe initialization)
   const [planResult, setPlanResult] = useState(() => {
     try {
-      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ ringNum: nextRingNumber(ringLogs) }) });
+      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ ringNum: nextRingNumber(trackRingLogs) }) });
     } catch (e) {
       console.error('Initial plan error:', e);
       return {
@@ -109,7 +139,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     const errors = [...validatePlanningInput({ startKey, startHLead, startVLead, maxTolerance }), ...validateAlignment(sections, vProfile)];
     if (errors.length) { setInputErrors(errors); setNeedsRecalc(true); return; }
     try {
-      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ringNum:nextRingNumber(ringLogs)}) });
+      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ringNum:nextRingNumber(trackRingLogs)}) });
       setPlanResult(res); setIsCalculated(true); setNeedsRecalc(false); setScrubStep(1); setInputErrors([]);
     } catch (error) { setInputErrors([error.message]); setNeedsRecalc(true); }
   };
@@ -235,7 +265,10 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     if (!isCalculated || needsRecalc || saving || !planResult.plannedRings.length) return;
     setSaving(true);
     try {
-      await onBatchSave(planResult.plannedRings.map(r=>({ ...r, key:r.selectedKey, hLead:r.afterH, vLead:r.afterV, recordType:'planned', timestamp:new Date().toISOString() })));
+      await onBatchSave(planResult.plannedRings.map(r=>({ ...r, track, key:r.selectedKey, hLead:r.afterH, vLead:r.afterV,
+        soilDrawing:soilForPlannedRing(r).sheet?.drawing || '', soilStatus:soilForPlannedRing(r).status,
+        soilClass:soilForPlannedRing(r).soil?.label || '',
+        recordType:'planned', timestamp:new Date().toISOString() })));
       setAppliedSuccess(true);
     } catch(error) { setInputErrors([error.message]); } finally { setSaving(false); }
   };
@@ -243,6 +276,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   // Export Plan to CSV
   const handleExportCSV = () => {
     const headers = [
+      'Tunnel', 'Soil center level (mRL)', 'Soil class (interpreted)', 'Soil reading status', 'Soil drawing',
       'Step',
       'STA (Chainage)',
       'Ring No.',
@@ -271,6 +305,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     ];
 
     const rows = planResult.plannedRings.map((r) => [
+      track, Math.abs((stationMeters(r.sta) ?? -1e9) - (stationMeters(currentSTA) ?? 1e9)) < 0.5 ? soilElevations[track] : '',
+      soilForPlannedRing(r).soil?.english || '', soilForPlannedRing(r).status, soilForPlannedRing(r).sheet?.drawing || '',
       r.step,
       r.sta,
       r.ringNum,
@@ -301,7 +337,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       planResult.verdict.status,
     ]);
 
-    exportCSV('tbm-advance-plan.csv', headers, rows);
+    exportCSV(`tbm-advance-plan-${track}.csv`, headers, rows);
   };
 
   const summary = planResult.summary || summarizeRings(planResult.plannedRings, {...getLimits(gapSettings),lead:Number(maxTolerance)});
@@ -312,11 +348,14 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   return (
     <div className="stack pb-12">
-      <PageHeader eyebrow="Alignment planning · DTA simulator" title="วางแผนแนวอุโมงค์และตรวจ DTA" description="ดูสถานะทั้งแผน เลือกริงเพื่อตรวจรายละเอียด และแยกผลคาดการณ์ออกจากค่าตรวจสนาม" actions={<>
+      <PageHeader eyebrow={`Alignment planning · ${track} · DTA simulator`} title={`วางแผนแนวอุโมงค์ ${track} และตรวจ DTA`} description="ดูสถานะทั้งแผน เลือกริงเพื่อตรวจรายละเอียด และแยกผลคาดการณ์ออกจากค่าตรวจสนาม" actions={<>
         <button className="btn btn-acc" onClick={handleCalculate}>{needsRecalc?'คำนวณใหม่จากค่าที่แก้':'คำนวณแผน'}</button>
         <button className="btn btn-outline" onClick={handleBatchSave} disabled={needsRecalc||saving||!planResult.plannedRings.length}>{saving?'กำลังบันทึก…':'เก็บเป็นแผนคาดการณ์'}</button>
       </>}/>
       <ValidationErrors errors={inputErrors}/>
+      <SoilProfilePanel station={currentSTA} track={track} onTrackChange={onTrackChange} elevations={soilElevations}
+        onElevationChange={(which, value) => setSoilElevations(previous => ({...previous,[which]:value}))}/>
+      <p className="section-note">แผน {track} เก็บค่าตั้งต้นและช่วง Alignment แยกจากอีกแนว · ระดับ mRL ที่กรอกใช้เฉพาะ STA หัวเจาะปัจจุบัน ริงอื่นต้องมีระดับของแต่ละ STA จึงจะระบุชั้นดินได้ · ค่า Alignment เดิมใน Master Settings เป็นเพียงต้นแบบ ต้องตรวจให้ตรงแบบ Orange Line</p>
       {needsRecalc && <InsightPanel level="warning" title="ข้อมูลเปลี่ยนแล้ว ผลด้านล่างเป็นแผนก่อนแก้ไข"><p>คำนวณใหม่ก่อนส่งออกหรือบันทึกแผน</p></InsightPanel>}
       {appliedSuccess && (
         <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl text-sm font-medium">
@@ -833,6 +872,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                   <th className="p-2.5">STA</th>
                   <th className="p-2.5">Ring No.</th>
                   <th className="p-2.5">Sec</th>
+                  <th className="p-2.5">ชั้นดิน {track}</th>
                   <th className="p-2.5">Key</th>
                   <th className="p-2.5">Suit.</th>
                   <th className="p-2.5">After H</th>
@@ -864,6 +904,10 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
                       <td className="p-2.5 font-bold text-text">{r.sta}</td>
                       <td className="p-2.5 font-bold text-acc"><button className="underline" onClick={()=>{setScrubStep(r.step);setActiveSubTab('2d_map');}}>{r.ringNum}</button></td>
                       <td className="p-2.5 text-text-muted font-bold">{r.sectionCode}</td>
+                      <td className="p-2.5" title={`แบบ ${soilForPlannedRing(r).sheet?.drawing || 'นอกช่วง'} · สถานะ ${soilForPlannedRing(r).status}`}>
+                        {soilForPlannedRing(r).soil?.label || 'ต้องมี mRL รายริง'}
+                        {soilForPlannedRing(r).status === 'boundary' ? ' ⚠' : ''}
+                      </td>
                       <td className="p-2.5">
                         <span
                           className={`px-2 py-0.5 rounded font-black text-xs shadow-sm ${
@@ -919,7 +963,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
           </div></div>
         )}
       </div>
-      {selectedRing && <div className="two-columns"><InsightPanel level={assessRing(selectedRing,{...getLimits(gapSettings),lead:planResult.maxTolerance}).level} title={`${selectedRing.ringNum} · ${selectedRing.selectedKey} · STA ${selectedRing.sta}`}><p>{selectedRing.aiReasoning}</p><p>After H/V {selectedRing.afterH}/{selectedRing.afterV} mm · DTA H/V {selectedRing.deviationMm}/{selectedRing.deviationVMm} mm · มุมคลาด {selectedRing.headingErrorDeg}/{selectedRing.pitchErrorDeg}°</p></InsightPanel><GapVisualizer gapT={selectedRing.gapT} gapB={selectedRing.gapB} gapL={selectedRing.gapL} gapR={selectedRing.gapR} warnThreshold={gapSettings.warnThreshold} blockThreshold={gapSettings.criticalThreshold}/></div>}
+      {selectedRing && <div className="two-columns"><InsightPanel level={assessRing(selectedRing,{...getLimits(gapSettings),lead:planResult.maxTolerance}).level} title={`${track} · ${selectedRing.ringNum} · ${selectedRing.selectedKey} · STA ${selectedRing.sta}`}><p>{selectedRing.aiReasoning}</p><p>After H/V {selectedRing.afterH}/{selectedRing.afterV} mm · DTA H/V {selectedRing.deviationMm}/{selectedRing.deviationVMm} mm · มุมคลาด {selectedRing.headingErrorDeg}/{selectedRing.pitchErrorDeg}°</p><p>ชั้นดิน {track}: {soilForPlannedRing(selectedRing).soil?.label || 'ต้องมี mRL ของ STA นี้'} · แบบ {soilForPlannedRing(selectedRing).sheet?.drawing || 'นอกช่วง'}</p></InsightPanel><GapVisualizer gapT={selectedRing.gapT} gapB={selectedRing.gapB} gapL={selectedRing.gapL} gapR={selectedRing.gapR} warnThreshold={gapSettings.warnThreshold} blockThreshold={gapSettings.criticalThreshold}/></div>}
     </div>
   );
 }
