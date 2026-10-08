@@ -105,7 +105,7 @@ export default function Tunnel2DVisualizer({
 
   // Base SVG Canvas Dimensions
   const canvasW = 900;
-  const canvasH = compact ? 350 : isExpanded ? 650 : 460;
+  const canvasH = compact ? 400 : isExpanded ? 650 : 460;
 
   // Coordinate projection from Metric meters to base SVG space (NaN-safe)
   const project = useCallback((mX, mY) => {
@@ -243,11 +243,19 @@ export default function Tunnel2DVisualizer({
   }, [rings, project]);
 
   // 4. Mouse Zoom and Pan Handlers
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.18 : 0.85;
-    setZoom((prev) => Math.min(18.0, Math.max(0.35, Number((prev * zoomFactor).toFixed(3)))));
-  };
+  const handleWheel = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const zoomFactor = event.deltaY < 0 ? 1.18 : 0.85;
+    setZoom((previous) => Math.min(18.0, Math.max(0.35, Number((previous * zoomFactor).toFixed(3)))));
+  }, []);
+
+  useEffect(() => {
+    const canvas = containerRef.current;
+    if (!canvas) return undefined;
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
@@ -492,7 +500,6 @@ export default function Tunnel2DVisualizer({
       {/* Main SVG Interactive Map Canvas */}
       <div
         ref={containerRef}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -505,7 +512,7 @@ export default function Tunnel2DVisualizer({
         {/* Floating Hint Overlay */}
         <div className="absolute top-3 left-3 pointer-events-none z-10 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[11px] font-mono text-text-muted">
           <Move size={13} className="text-acc" />
-          <span>คลิกลากเพื่อเลื่อน &bull; หมุนลูกกลิ้งเมาส์เพื่อซูม &bull; คลิกที่ริ่งเพื่อดูสเปก</span>
+          <span>คลิกลากเพื่อเลื่อน &bull; ล้อเมาส์ซูมโดยไม่เลื่อนหน้า &bull; คลิกที่ริ่งเพื่อดูสเปก</span>
         </div>
 
         {/* Floating Hover Ring Tooltip HUD */}
