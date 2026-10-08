@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { useEffect, useState } from 'react';
 import { Save, RotateCcw } from 'lucide-react';
 import { PageHeader, Field, InsightPanel, StatusBadge, ValidationErrors, EmptyState } from '../components/PlannerUI';
@@ -16,7 +17,7 @@ export default function SingleRingPlanner({ ringLogs=[],onSaveRing=async()=>{},t
   const [message,setMessage]=useState('');
   const [filter,setFilter]=useState('all');
   const [allowedTypes,setAllowedTypes]=useState(()=>readStored(`tbm_single_types_${track}`,['U','R','L']));
-  useEffect(()=>{try{localStorage.setItem(`tbm_single_session_${track}`,JSON.stringify(form));localStorage.setItem(`tbm_single_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
+  useEffect(()=>{try{setProjectItem(`tbm_single_session_${track}`,JSON.stringify(form));setProjectItem(`tbm_single_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
   const [gapSettings]=useState(()=>readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS));
   const update=(key,value)=>{setForm(prev=>({...prev,[key]:value}));setMessage('');};
   const errors=[];

@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { useState } from 'react';
 import { Compass } from 'lucide-react';
 import { PageHeader } from '../components/PlannerUI';
@@ -8,7 +9,7 @@ import { soilLevelAtStation } from '../services/soilProfile';
 
 const savedStation = track => {
   const session=readStored(`tbm_advance_session_${track}`,{})||{};
-  const sections=Array.isArray(session.sections)&&session.sections.length?session.sections:readStored('tbm_horizontal_alignment',DEFAULT_ALIGNMENT_SECTIONS);
+  const sections=Array.isArray(session.sections)&&session.sections.length?session.sections:readStored(`tbm_horizontal_alignment_${track}`,readStored('tbm_horizontal_alignment',DEFAULT_ALIGNMENT_SECTIONS));
   return session.currentSTA??sections[0]?.startSTA??'';
 };
 
@@ -20,13 +21,13 @@ export default function SoilProfileView({track='EB',onTrackChange=()=>{},onNavig
   const changeStation=(which,value)=>{
     const session=readStored(`tbm_advance_session_${which}`,{})||{};
     const updated={...session,currentSTA:value,recovery:{...session.recovery,initialStateConfirmed:false}};
-    localStorage.setItem(`tbm_advance_session_${which}`,JSON.stringify(updated));
+    setProjectItem(`tbm_advance_session_${which}`,JSON.stringify(updated));
     setStations(previous=>({...previous,[which]:value}));
   };
   const changeElevation=(which,value)=>{
     const levels={...soilLevels,[which]:value},bindings={...soilLevelStations,[which]:stations[which]};
-    localStorage.setItem('tbm_soil_levels',JSON.stringify(levels));
-    localStorage.setItem('tbm_soil_level_stations',JSON.stringify(bindings));
+    setProjectItem('tbm_soil_levels',JSON.stringify(levels));
+    setProjectItem('tbm_soil_level_stations',JSON.stringify(bindings));
     setSoilLevels(levels);setSoilLevelStations(bindings);
   };
   return <div className="stack soil-page">

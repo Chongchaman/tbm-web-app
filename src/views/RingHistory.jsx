@@ -6,7 +6,7 @@ import { KEY_DATA } from '../data/tbmConstants';
 import { assessRing, summarizeRings, recordKind, RECORD_LABELS, ringNumber, nextRingNumber, validateRing, finite, readStored, getLimits, exportCSV } from '../services/decisionSupport';
 import { recordIdentity as id } from '../services/recordIdentity';
 
-export default function RingHistory({ringLogs=[],initialFilter='all',onUpdateRing=async()=>{},onAddRing=async()=>{},onBatchDelete=async()=>{}}) {
+export default function RingHistory({ringLogs=[],track='EB',initialFilter='all',onUpdateRing=async()=>{},onAddRing=async()=>{},onBatchDelete=async()=>{}}) {
   const [search,setSearch]=useState('');
   const [source,setSource]=useState(RECORD_LABELS[initialFilter.split(':')[0]]?initialFilter.split(':')[0]:'all');
   const [status,setStatus]=useState(initialFilter==='issues'||initialFilter.endsWith(':issues')?'issues':'all');
@@ -36,7 +36,7 @@ export default function RingHistory({ringLogs=[],initialFilter='all',onUpdateRin
   const openEditor=(ring=null,asMeasured=false)=>{
     setError('');
     const planned=ring&&recordKind(ring)==='planned';
-    const form=ring?{...ring,recordType:asMeasured?'measured':recordKind(ring)}:{ringNum:nextRingNumber(ringLogs.filter(r=>recordKind(r)!=='planned')),key:'L2',recordType:'measured',hLead:'',vLead:'',gapT:'',gapB:'',gapL:'',gapR:'',roll:0,pitch:0,deviationMm:'',notes:''};
+    const form=ring?{...ring,recordType:asMeasured?'measured':recordKind(ring)}:{ringNum:nextRingNumber(ringLogs.filter(r=>recordKind(r)!=='planned')),track,key:'L2',recordType:'measured',hLead:'',vLead:'',gapT:'',gapB:'',gapL:'',gapR:'',roll:0,pitch:0,deviationMm:'',notes:''};
     if(planned&&asMeasured) Object.assign(form,{hLead:'',vLead:'',gapT:'',gapB:'',gapL:'',gapR:'',deviationMm:'',notes:`ค่าตรวจสนาม · แผนคีย์เดิม ${ring.key}`});
     setEditor({existing:ring,form,confirmed:false});
   };

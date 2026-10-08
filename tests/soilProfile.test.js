@@ -23,9 +23,10 @@ test('soil reading requires verified elevation and flags ambiguity near a band e
   assert.equal(soilColumnAt('20+100', 'EB').length, 16);
 });
 
-test('planned rings with the same number retain separate EB and WB identities', () => {
+test('ring identities are separate for EB and WB while unassigned legacy defaults to EB', () => {
   const base = { recordType:'planned', ringNum:'R0001' };
   const ids = [recordIdentity({ ...base, track:'EB' }), recordIdentity({ ...base, track:'WB' }), recordIdentity(base)];
-  assert.equal(new Set(ids).size, 3);
-  assert.equal(recordIdentity({ ...base, recordType:'measured', track:'EB' }), 'measured:1');
+  assert.equal(new Set(ids).size, 2);
+  assert.equal(recordIdentity({ ...base, recordType:'measured', track:'EB' }), 'measured:EB:1');
+  assert.equal(recordIdentity({ ...base, recordType:'measured', track:'WB' }), 'measured:WB:1');
 });

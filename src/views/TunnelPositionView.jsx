@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { useMemo, useState } from 'react';
 import { Compass, Crosshair, Layers3, Plus, Trash2 } from 'lucide-react';
 import { Field, PageHeader, ValidationErrors } from '../components/PlannerUI';
@@ -112,13 +113,13 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
   const mode = tbmMode(track);
   const [session,setSession] = useState(() => {
     const saved=readStored(`tbm_advance_session_${track}`,{});
-    const sections=Array.isArray(saved.sections)&&saved.sections.length?saved.sections:readStored('tbm_horizontal_alignment',DEFAULT_ALIGNMENT_SECTIONS);
-    const vProfile=Array.isArray(saved.vProfile)&&saved.vProfile.length?saved.vProfile:readStored('tbm_vertical_alignment',DEFAULT_VERTICAL_ALIGNMENT);
+    const sections=Array.isArray(saved.sections)&&saved.sections.length?saved.sections:readStored(`tbm_horizontal_alignment_${track}`,readStored('tbm_horizontal_alignment',DEFAULT_ALIGNMENT_SECTIONS));
+    const vProfile=Array.isArray(saved.vProfile)&&saved.vProfile.length?saved.vProfile:readStored(`tbm_vertical_alignment_${track}`,readStored('tbm_vertical_alignment',DEFAULT_VERTICAL_ALIGNMENT));
     return {...saved,sections,vProfile,currentSTA:saved.currentSTA??sections[0]?.startSTA??'',recovery:{...DEFAULT_RECOVERY,...saved.recovery}};
   });
   const [soilLevels,setSoilLevels]=useState(()=>readStored('tbm_soil_levels',{EB:'',WB:''}));
   const [soilStations,setSoilStations]=useState(()=>readStored('tbm_soil_level_stations',{}));
-  const setPlan=value=>{const next={...session,...value};localStorage.setItem(`tbm_advance_session_${track}`,JSON.stringify(next));setSession(next);};
+  const setPlan=value=>{const next={...session,...value};setProjectItem(`tbm_advance_session_${track}`,JSON.stringify(next));setSession(next);};
   const setAlignment=value=>setPlan({...value,recovery:{...session.recovery,initialStateConfirmed:false},
     ...(value.vProfile?{verticalDatumConfirmed:false}:{})});
   const changeRecovery=(name,value)=>setPlan({recovery:{...session.recovery,[name]:value,
@@ -132,7 +133,7 @@ export default function TunnelPositionView({ track='EB', onTrackChange=()=>{}, o
     const next={...createNewVerticalElement(),startSTA:last.endSTA,endSTA:formattedSTA(stationMeters(last.endSTA)+sign*50),startElev:last.endElev,endElev:last.endElev};
     setAlignment({vProfile:[...session.vProfile,next]});};
   const changeSoilLevel=value=>{const nextLevels={...soilLevels,[track]:value},nextStations={...soilStations,[track]:session.currentSTA};
-    localStorage.setItem('tbm_soil_levels',JSON.stringify(nextLevels));localStorage.setItem('tbm_soil_level_stations',JSON.stringify(nextStations));
+    setProjectItem('tbm_soil_levels',JSON.stringify(nextLevels));setProjectItem('tbm_soil_level_stations',JSON.stringify(nextStations));
     setSoilLevels(nextLevels);setSoilStations(nextStations);};
   const level=soilLevelAtStation(soilLevels,soilStations,track,session.currentSTA);
   const model=useMemo(()=>buildAlignmentPosition({sections:session.sections,vertical:session.vProfile,currentSTA:session.currentSTA,recovery:session.recovery}),[session]);

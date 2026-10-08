@@ -7,23 +7,23 @@ import { runAutoPlan } from '../src/services/autoPlanner.js';
 import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, DEFAULT_GAP_SETTINGS } from '../src/services/advancePlanner.js';
 import { calibrateFromRingLogs } from '../src/services/aiCalibrator.js';
 import { calculateFoamConsumption, calculatePolymerConsumption, calculateCurveOffset, calculateCandidates } from '../src/services/calculator.js';
-import { formatRingToDbRow, formatDbRowToRing } from '../src/services/supabaseService.js';
+import { recordRow, parseRecordRows } from '../src/services/googleSheetsService.js';
 import { DEFAULT_RECOVERY, recoveryTarget, createRoute, initialRecoveryState, propagateRecovery, endpointAssessment, radians } from '../src/services/alignmentRecovery.js';
 
 const normal = {hLead:0,vLead:0,gapT:50,gapB:50,gapL:50,gapR:50,suitability:'Yes'};
 const section = { ...DEFAULT_ALIGNMENT_SECTIONS[0], code:'TEST', startSTA:'00+000.000', endSTA:'00+015.000', ratio:{un:1,rt:1,lt:1}, allowedTypes:['U','R','L'] };
 
-test('zero gaps are critical, retain zero through cloud format, and optional DTA stays absent', () => {
+test('zero gaps are critical, retain zero through Sheets format, and optional DTA stays absent', () => {
  const record = {...normal,ringNum:'R0020',key:'R4',gapL:0,recordType:'measured',notes:'zero gap test',timestamp:'2026-09-28T00:00:00Z'};
- const row = formatRingToDbRow(record), back = formatDbRowToRing(row);
- assert.equal(back.gapL,0);assert.equal(back.deviationMm,null);assert.equal(back.recordType,'measured');assert.equal(back.notes,record.notes);
+ const back = parseRecordRows([recordRow(record)])[0];
+ assert.equal(back.gapL,0);assert.equal(back.deviationMm,undefined);assert.equal(back.recordType,'measured');assert.equal(back.notes,record.notes);
  assert.equal(assessRing(back).level,'critical');assert.equal(assessRing(back).minGap,0);
  assert.equal(predictGaps(0,0,{initialGapLeft:0}).gapL,0);
 });
 
 test('missing measurements remain unknown rather than becoming zero or DTA estimates',()=>{
  assert.equal(finite(''),false);assert.equal(finite(null),false);
- const back=formatDbRowToRing({ring_number:1,key_position:'R4',h_lead:null,v_plumb:null});
+ const back=parseRecordRows([recordRow({ringNum:'R0001',key:'R4',recordType:'measured',hLead:null,vLead:null})])[0];
  assert.equal(back.hLead,null);assert.equal(assessRing(back).level,'unknown');
  const assessment=assessRing({...normal,hLead:54});
  assert.equal(assessment.deviationKnown,false);assert.equal(assessment.issues.some(i=>i.code==='dta'),false);

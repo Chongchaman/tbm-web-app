@@ -11,12 +11,11 @@ const ConsumablesView = lazy(() => import('./views/ConsumablesView'));
 const MasterDataView = lazy(() => import('./views/MasterDataView'));
 const GuideView = lazy(() => import('./views/GuideView'));
 import ErrorBoundary from './components/ErrorBoundary';
-import SupabaseModal from './components/SupabaseModal';
+import GoogleSheetsModal from './components/GoogleSheetsModal';
 import AppearanceSettings from './components/AppearanceSettings';
 import { normalizeAppearance, appearanceTokens } from './services/appearance';
 import { INITIAL_RING_LOGS } from './data/tbmConstants';
-import { isSupabaseConfigured } from './services/supabaseClient';
-import { fetchRingLogsFromCloud, batchSaveRingLogsToCloud, batchDeleteRingLogsFromCloud, subscribeToRealtimeRings } from './services/supabaseService';
+import { flushPendingRecords, isSheetsConnected, pendingCount, queueRecordChanges, setProjectItem } from './services/googleSheetsService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
 import { tbmMode } from './services/tbmMode';
@@ -34,7 +33,7 @@ const menus = [
   { id:'guide', label:'คู่มือการใช้งาน', icon:BookOpen },
 ];
 const sortRings = rings => [...rings].sort((a,b) => ringNumber(a)-ringNumber(b));
-const canonical = ring => ({ ...ring, ringNum:`R${String(ringNumber(ring)).padStart(4,'0')}`, ringNumber:ringNumber(ring), recordType:recordKind(ring) });
+const canonical = ring => ({ ...ring, track:ring.track==='WB'?'WB':'EB', ringNum:`R${String(ringNumber(ring)).padStart(4,'0')}`, ringNumber:ringNumber(ring), recordType:recordKind(ring) });
 
 export default function AppShell() {
   const [activeTab,setActiveTab] = useState('advanceplanner');
@@ -42,9 +41,8 @@ export default function AppShell() {
   const [sidebarOpen,setSidebarOpen] = useState(false);
   const [cloudModal,setCloudModal] = useState(false);
   const [preferences,setPreferences] = useState(false);
-  const [configured,setConfigured] = useState(isSupabaseConfigured);
+  const [connected,setConnected] = useState(isSheetsConnected);
   const [cloudState,setCloudState] = useState('local');
-  const [cloudReconnectVersion,setCloudReconnectVersion] = useState(0);
   const [notice,setNotice] = useState(null);
   const [historyFilter,setHistoryFilter] = useState('all');
   const [appearance,setAppearance] = useState(() => normalizeAppearance(readStored('tbm_appearance',{
@@ -72,15 +70,15 @@ export default function AppShell() {
     const keys={theme:'tbm_theme',fontFamily:'tbm_ui_font',fontSize:'tbm_ui_size',density:'tbm_density'};
     Object.entries(values).forEach(([key,value])=>{
       document.documentElement.setAttribute(`data-${key==='fontFamily'?'font-family':key==='fontSize'?'font-size':key}`,value);
-      try { localStorage.setItem(keys[key],JSON.stringify(value)); } catch { /* preferences remain available for this session */ }
+      try { setProjectItem(keys[key],JSON.stringify(value)); } catch { /* preferences remain available for this session */ }
     });
     Object.entries(appearanceTokens(appearance)).forEach(([key,value])=>document.documentElement.style.setProperty(key,value));
     document.title=`${appearance.appName} — ${appearance.projectName}`;
-    try {localStorage.setItem('tbm_appearance',JSON.stringify(appearance));} catch { /* settings remain available for this session */ }
+    try {setProjectItem('tbm_appearance',JSON.stringify(appearance));} catch { /* settings remain available for this session */ }
   },[appearance,theme,fontFamily,fontSize,density]);
 
   const saveAppearance=value=>{
-    localStorage.setItem('tbm_appearance',JSON.stringify(value));
+    setProjectItem('tbm_appearance',JSON.stringify(value));
     setAppearance(value);
     setNotice({level:'normal',text:'บันทึกชื่อโครงการและหน้าตาในเบราว์เซอร์นี้แล้ว'});
   };
@@ -89,43 +87,17 @@ export default function AppShell() {
     try {
       if(!backupMade.current) {
         const original=localStorage.getItem('tbm_ring_logs');
-        if(original && !localStorage.getItem('tbm_ring_logs_before_smart_ui')) localStorage.setItem('tbm_ring_logs_before_smart_ui',original);
+        if(original && !localStorage.getItem('tbm_ring_logs_before_smart_ui')) setProjectItem('tbm_ring_logs_before_smart_ui',original);
         backupMade.current=true;
       }
       // Write the separated plans first so migration is recoverable if storage is full.
-      localStorage.setItem('tbm_saved_plans',JSON.stringify(plans));
-      localStorage.setItem('tbm_ring_logs',JSON.stringify(ringLogs));
+      setProjectItem('tbm_saved_plans',JSON.stringify(plans));
+      setProjectItem('tbm_ring_logs',JSON.stringify(ringLogs));
     } catch { queueMicrotask(()=>setNotice({level:'critical',text:'พื้นที่บันทึกในเครื่องไม่พอ กรุณาสำรองข้อมูลก่อนปิดหน้า'})); }
   },[ringLogs,plans]);
 
-  useEffect(()=>{
-    if(!configured) return;
-    let active=true;
-    const changed=new Set();
-    const upsert = ring => {
-      if(!active) return;
-      const next=canonical(ring); changed.add(ringNumber(next));
-      if(recordKind(next)==='planned') setPlans(prev=>sortRings([...prev.filter(r=>identity(r)!==identity(next)),next]));
-      else setRingLogs(prev=>sortRings([...prev.filter(r=>ringNumber(r)!==ringNumber(next)),next]));
-    };
-    const stop=subscribeToRealtimeRings(upsert,upsert,num=>{
-      if(!active) return; changed.add(num);
-      setRingLogs(prev=>prev.filter(r=>ringNumber(r)!==num));
-    },status=>{if(active && status!=='SUBSCRIBED') setCloudState(status==='CHANNEL_ERROR'||status==='TIMED_OUT'?'error':'checking');else if(active) setCloudState('live');});
-    fetchRingLogsFromCloud().then(res=>{
-      if(!active) return;
-      if(res.error) {setCloudState('error');setNotice({level:'warning',text:`อ่าน Cloud ไม่สำเร็จ: ${res.error} · ข้อมูลในเครื่องยังอยู่`});return;}
-      const remote=(res.data||[]).map(canonical);
-      const remoteNumbers=new Set(remote.filter(r=>recordKind(r)!=='planned').map(ringNumber));
-      setRingLogs(prev=>sortRings([...prev.filter(r=>!remoteNumbers.has(ringNumber(r)) || changed.has(ringNumber(r))),...remote.filter(r=>recordKind(r)!=='planned' && !changed.has(ringNumber(r)))]));
-      setPlans(prev=>sortRings([...new Map([...remote.filter(r=>recordKind(r)==='planned'),...prev].map(r=>[identity(r),r])).values()]));
-      setCloudState(previous=>previous==='live'?'live':'loaded');
-    });
-    return ()=>{active=false;stop?.();};
-  },[configured,cloudReconnectVersion]);
-
   const navigate=(tab,filter='all')=>{setActiveTab(tab);setHistoryFilter(filter);setSidebarOpen(false);window.scrollTo({top:0,behavior:'instant'});};
-  const changeAdvanceTrack=value=>{if(!['EB','WB'].includes(value))return;setAdvanceTrack(value);try{localStorage.setItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
+  const changeAdvanceTrack=value=>{if(!['EB','WB'].includes(value))return;setAdvanceTrack(value);try{setProjectItem('tbm_advance_track',JSON.stringify(value));}catch{/* current session remains usable */}};
   async function writeRecords(records, existing=null) {
     if(busy.current) throw new Error('กำลังบันทึกข้อมูล กรุณารอสักครู่');
     busy.current=true;
@@ -135,40 +107,47 @@ export default function AppShell() {
       if(errors.length) throw new Error(errors.join(' · '));
       if(new Set(normalized.map(identity)).size!==normalized.length) throw new Error('มีหมายเลขริงซ้ำในรายการที่บันทึก');
       const fieldRecords=normalized.filter(r=>recordKind(r)!=='planned');
-      if(fieldRecords.some(next=>logsRef.current.some(old=>ringNumber(old)===ringNumber(next) && old!==existing && identity(old)!==identity(existing||{})))) throw new Error('หมายเลขริงมีอยู่แล้ว กรุณาแก้ไขรายการเดิมในประวัติ');
-      if(existing && ringNumber(existing)!==ringNumber(normalized[0])) throw new Error('แก้หมายเลขริงไม่ได้ กรุณาเพิ่มรายการใหม่');
-      if(configured && fieldRecords.length) {
-        const res=await batchSaveRingLogsToCloud(fieldRecords);
-        if(res.error) {setCloudState('error');throw new Error(`Cloud ไม่ยืนยันการบันทึก: ${res.error}`);}
-      }
+      if(fieldRecords.some(next=>logsRef.current.some(old=>ringNumber(old)===ringNumber(next) && old.track===next.track && old!==existing && identity(old)!==identity(existing||{})))) throw new Error('หมายเลขริงของเครื่องนี้มีอยู่แล้ว กรุณาแก้ไขรายการเดิมในประวัติ');
+      if(existing && (ringNumber(existing)!==ringNumber(normalized[0]) || (existing.track||'EB')!==normalized[0].track)) throw new Error('แก้หมายเลขริงหรือเครื่องเจาะไม่ได้ กรุณาเพิ่มรายการใหม่');
       const nextPlans=normalized.filter(r=>recordKind(r)==='planned');
+      queueRecordChanges(normalized,'save');
       if(nextPlans.length) setPlans(prev=>sortRings([...prev.filter(old=>!nextPlans.some(next=>identity(next)===identity(old))),...nextPlans]));
-      if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>ringNumber(next)===ringNumber(old))),...fieldRecords]));
+      if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>identity(next)===identity(old))),...fieldRecords]));
       if(existing && recordKind(existing)==='planned' && fieldRecords.length) setPlans(prev=>prev.filter(r=>identity(r)!==identity(existing)));
-      setNotice({level:'normal',text:nextPlans.length?`บันทึกแผนคาดการณ์ ${nextPlans.length} ริงในเครื่องแล้ว · แยกจากข้อมูลสนาม`:`บันทึก ${fieldRecords.length} รายการ${configured?' และ Cloud ยืนยันแล้ว':'ในเครื่องแล้ว'}`});
+      if(connected && localStorage.getItem('tbm_google_sheets_migrated')==='1') {
+        try { await flushPendingRecords(); setCloudState('live'); setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องและ Google Sheet แล้ว`}); }
+        catch(error) {setCloudState('error');setNotice({level:'warning',text:`บันทึกในเครื่องแล้ว · รอส่งไป Google Sheet (${error.message})`});}
+      } else setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Google Sheet`});
     } catch(error) {setNotice({level:'critical',text:error.message});throw error;} finally {busy.current=false;}
   }
   async function removeRecords(records) {
     if(busy.current) throw new Error('กำลังบันทึกข้อมูล กรุณารอ');
     busy.current=true;
     try {
-      const fieldRecords=records.filter(r=>recordKind(r)!=='planned');
-      if(configured && fieldRecords.length) {const res=await batchDeleteRingLogsFromCloud(fieldRecords.map(ringNumber));if(res.error) throw new Error(res.error);}
+      queueRecordChanges(records,'delete');
       const ids=new Set(records.map(identity));
       setRingLogs(prev=>prev.filter(r=>!ids.has(identity(r)))); setPlans(prev=>prev.filter(r=>!ids.has(identity(r))));
-      setNotice({level:'normal',text:`ลบ ${records.length} รายการแล้ว`});
+      if(connected && localStorage.getItem('tbm_google_sheets_migrated')==='1') {
+        try { await flushPendingRecords(); setCloudState('live'); setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องและ Google Sheet แล้ว`}); }
+        catch(error) {setCloudState('error');setNotice({level:'warning',text:`ลบในเครื่องแล้ว · รอส่งไป Google Sheet (${error.message})`});}
+      } else setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Google Sheet`});
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),singleEB:readStored('tbm_single_session_EB',{}),singleWB:readStored('tbm_single_session_WB',{}),singleTypesEB:readStored('tbm_single_types_EB',[]),singleTypesWB:readStored('tbm_single_types_WB',[]),sequenceEB:readStored('tbm_sequence_session_EB',{}),sequenceWB:readStored('tbm_sequence_session_WB',{}),sequenceTypesEB:readStored('tbm_sequence_types_EB',[]),sequenceTypesWB:readStored('tbm_sequence_types_WB',[]),soilLevels:readStored('tbm_soil_levels',{}),soilLevelStations:readStored('tbm_soil_level_stations',{})},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({version:4,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),horizontalEB:readStored('tbm_horizontal_alignment_EB',[]),horizontalWB:readStored('tbm_horizontal_alignment_WB',[]),verticalEB:readStored('tbm_vertical_alignment_EB',[]),verticalWB:readStored('tbm_vertical_alignment_WB',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),singleEB:readStored('tbm_single_session_EB',{}),singleWB:readStored('tbm_single_session_WB',{}),singleTypesEB:readStored('tbm_single_types_EB',[]),singleTypesWB:readStored('tbm_single_types_WB',[]),sequenceEB:readStored('tbm_sequence_session_EB',{}),sequenceWB:readStored('tbm_sequence_session_WB',{}),sequenceTypesEB:readStored('tbm_sequence_types_EB',[]),sequenceTypesWB:readStored('tbm_sequence_types_WB',[]),soilLevels:readStored('tbm_soil_levels',{}),soilLevelStations:readStored('tbm_soil_level_stations',{})},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`tbm-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const active=menus.find(m=>m.id===activeTab);
+  const latestField=track=>ringLogs.filter(r=>r.track===track&&recordKind(r)==='measured').sort((a,b)=>ringNumber(a)-ringNumber(b)).at(-1);
+  const leadRing=latestField('EB');
+  const followRing=latestField('WB');
+  const activePlans=plans.filter(r=>r.track===advanceTrack);
   return <ErrorBoundary><a className="skip-link" href="#main-content">ข้ามไปเนื้อหา</a><div className="app-shell">
     {sidebarOpen && <button className="sidebar-overlay" aria-label="ปิดเมนู" onClick={()=>setSidebarOpen(false)} />}
-    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.length+plans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>ฐานข้อมูล Cloud<small style={{display:'block'}}>{!configured?'ใช้ข้อมูลในเครื่อง':cloudState==='live'?'Realtime เชื่อมต่อแล้ว':cloudState==='loaded'?'อ่าน Cloud แล้ว · รอ Realtime':cloudState==='error'?'เชื่อมต่อมีปัญหา':'กำลังตรวจการเชื่อมต่อ'}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
-    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions">{['advanceplanner','position','soil','planning','autoplanner'].includes(activeTab)&&<div className="topbar-tbm-switch" role="group" aria-label="เลือกเครื่องเจาะ">{['EB','WB'].map(value=><button key={value} aria-pressed={advanceTrack===value} onClick={()=>changeAdvanceTrack(value)}>{tbmMode(value).machine}<small>{value}</small></button>)}</div>}<button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
+    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.filter(r=>r.track===advanceTrack).length+activePlans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>Google Sheets<small style={{display:'block'}}>{!connected?`ข้อมูลในเครื่อง · รอส่ง ${pendingCount()}`:cloudState==='error'?`เชื่อมต่อมีปัญหา · รอส่ง ${pendingCount()}`:`เชื่อมต่อแล้ว · รอส่ง ${pendingCount()}`}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
+    <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions">{activeTab!=='guide'&&<div className="topbar-tbm-switch" role="group" aria-label="เลือกเครื่องเจาะ">{['EB','WB'].map(value=><button key={value} aria-pressed={advanceTrack===value} onClick={()=>changeAdvanceTrack(value)}>{tbmMode(value).machine}<small>{value}</small></button>)}</div>}<button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button></div></header>
     <main className="app-content" id="main-content">
+      {activeTab!=='guide' && <div className="machine-context"><div><strong>{advanceTrack==='EB'?'TBM1 · E/B · หัวนำ':'TBM2 · W/B · หัวตาม'}</strong><span>แผนที่บันทึก {activePlans.length} ริง · ข้อมูลและแนวของเครื่องนี้</span></div><div className="machine-progress"><span>TBM1 · {plans.filter(r=>r.track==='EB').length} แผน · {leadRing?.ringNum||'ยังไม่มีค่าจริง'}</span><span>TBM2 · {plans.filter(r=>r.track==='WB').length} แผน · {followRing?.ringNum||'ยังไม่มีค่าจริง'}</span>{leadRing&&followRing&&<b>ต่างกัน {Math.abs(ringNumber(leadRing)-ringNumber(followRing))} ริง</b>}</div></div>}
       {notice && <div className={`notice-toast status-${notice.level}`} role="status"><span>{notice.text}</span><button className="icon-button" aria-label="ปิดข้อความ" onClick={()=>setNotice(null)}><X size={16}/></button></div>}
       <Suspense fallback={<div className="empty-state" role="status">กำลังเปิดหน้าจอ…</div>}>
       {activeTab==='advanceplanner' && <AdvancePlannerView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} onNavigate={navigate} theme={theme}/>}
@@ -176,14 +155,14 @@ export default function AppShell() {
       {activeTab==='soil' && <SoilProfileView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} onNavigate={navigate}/>}
       {activeTab==='planning' && <PlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} onSaveRing={record=>writeRecords([{...record,track:advanceTrack,recordType:'planned'}])} theme={theme}/>}
       {activeTab==='autoplanner' && <AutoPlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} onBatchSave={records=>writeRecords(records.map(r=>({...r,track:advanceTrack,recordType:'planned'})))} theme={theme}/>}
-      {activeTab==='dashboard' && <DashboardView ringLogs={ringLogs} plans={plans} onNavigate={navigate} theme={theme}/>}
-      {activeTab==='history' && <HistoryLogView ringLogs={sortRings([...ringLogs,...plans])} initialFilter={historyFilter} onUpdateRing={(existing,record)=>writeRecords([record],existing)} onAddRing={record=>writeRecords([record])} onBatchDelete={removeRecords}/>}
-      {activeTab==='consumables' && <ConsumablesView ringLogs={ringLogs}/>}
-      {activeTab==='masterdata' && <MasterDataView onNavigate={navigate}/> }
+      {activeTab==='dashboard' && <DashboardView key={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} plans={activePlans} onNavigate={navigate} theme={theme}/>}
+      {activeTab==='history' && <HistoryLogView key={advanceTrack} track={advanceTrack} ringLogs={sortRings([...ringLogs,...plans].filter(r=>r.track===advanceTrack))} initialFilter={historyFilter} onUpdateRing={(existing,record)=>writeRecords([record],existing)} onAddRing={record=>writeRecords([record])} onBatchDelete={removeRecords}/>}
+      {activeTab==='consumables' && <ConsumablesView key={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)}/>}
+      {activeTab==='masterdata' && <MasterDataView key={advanceTrack} track={advanceTrack} onNavigate={navigate}/> }
       {activeTab==='guide' && <GuideView onNavigate={navigate}/>}
       </Suspense>
     </main></div></div>
     {preferences && <AppearanceSettings settings={appearance} onSave={saveAppearance} onClose={()=>setPreferences(false)} />}
-    {cloudModal && <SupabaseModal isOpen={cloudModal} onClose={()=>setCloudModal(false)} ringLogs={ringLogs} onSyncRingLogs={records=>{setRingLogs(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)!=='planned').map(canonical)].map(r=>[ringNumber(r),r])).values()]));setPlans(previous=>sortRings([...new Map([...previous,...records.filter(r=>recordKind(r)==='planned').map(canonical)].map(r=>[identity(r),r])).values()]));}} onConnectionChange={value=>{setConfigured(value);setCloudState(value?'checking':'local');setNotice(null);if(value)setCloudReconnectVersion(previous=>previous+1);}}/>}
+    {cloudModal && <GoogleSheetsModal onClose={()=>setCloudModal(false)} ringLogs={ringLogs} plans={plans} onConnectionChange={value=>{setConnected(value);setCloudState(value?'live':'local');setNotice(null);}}/>}
   </ErrorBoundary>;
 }

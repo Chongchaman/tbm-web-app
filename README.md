@@ -1,42 +1,32 @@
-# TBM Ring Planner — Modern Web Edition
+# TBM Ring Planner
 
-เวอร์ชันใหม่ของระบบวางแผน TBM Ring Segment ที่ย้ายจาก Google Apps Script (GAS) แบบเดิม มาเป็น **Modern Web App (React + Vite)** เพื่อประสิทธิภาพที่ดีขึ้น ดีไซน์ที่สวยงามกว่า และรองรับการทำ CI/CD ผ่าน GitHub
+เว็บวางแผน Segment สำหรับ TBM1 (E/B) และ TBM2 (W/B) แยกข้อมูลริง แผน และแนวอุโมงค์ของแต่ละเครื่อง เปิดใช้งานที่ https://tbm-web-app.vercel.app/
 
-## 🏗️ โครงสร้างระบบใหม่
-- **Frontend**: React (Vite) + Lucide Icons + Framer Motion (Hosting บน GitHub Pages)
-- **Backend (API)**: Google Apps Script Web App (ทำหน้าที่เป็น Bridge เชื่อมต่อ Google Sheets)
-- **Database**: Google Sheets (เหมือนเดิม เพื่อให้ทีมงานยังคงดูข้อมูลดิบได้สะดวก)
+## ฐานข้อมูล Google Sheets
 
-## 🚀 วิธีการตั้งค่าครั้งแรก
+- [TBM1 · E/B](https://docs.google.com/spreadsheets/d/1dyc2SDKhpUyxHdVFDx2RHTcdIbwEgX3hPkwR8v4amB8/edit): ประวัติ/แผนริงและข้อมูลตั้งค่าของ TBM1
+- [TBM2 · W/B](https://docs.google.com/spreadsheets/d/1gTafcYxS_DFSDbxj56ypzvExAhhL3TdhOylGeRgjLdI/edit): ประวัติ/แผนริงและข้อมูลตั้งค่าของ TBM2
 
-### 1. ฝั่ง Google Apps Script (Backend)
-- นำโค้ดจาก `Code.gs` ในโฟลเดอร์โปรเจกต์ไปทับใน GAS Editor เดิม
-- กดปุ่ม **Deploy** > **New Deployment**
-- เลือกประเภทเป็น **Web App**
-- ตั้งค่า:
-  - **Execute as:** Me (ตัวคุณ)
-  - **Who has access:** Anyone (เพื่อให้ GitHub App เรียก API ได้)
-- กด **Deploy** และคัดลอก **Web App URL** ไว้
+แต่ละไฟล์มีแท็บ `Records` (หนึ่งแถวต่อริง พร้อม JSON ฉบับเต็ม) และ `AppState` (แนวอุโมงค์ เซสชันการวางแผน ชนิด Segment ที่เปิดใช้ ชั้นดิน และค่าตั้งค่า) เว็บเก็บสำเนาในเบราว์เซอร์ไว้ใช้ขณะออฟไลน์ และส่งการเปลี่ยนแปลงขึ้นชีตหลังลงชื่อเข้าใช้ Google การลบใช้เครื่องหมายลบในคอลัมน์ `Deleted At` เพื่อไม่ให้รายการกลับมาเมื่อดึงข้อมูลอีกครั้ง
 
-### 2. ฝั่ง Web App (Frontend)
-- ไปที่ไฟล์ `src/services/api.js`
-- นำ URL ที่คัดลอกมาใส่ในตัวแปร `GAS_URL`
-- รันคำสั่งทดสอบในโฟลเดอร์ `tbm-web-app`:
-  ```bash
-  npm install
-  npm run dev
-  ```
+## เปิดใช้งานการซิงก์ในเว็บ
 
-## 🎨 จุดเด่นของเวอร์ชันนี้
-- **Premium UI**: ใช้โทนสี Dark Mode แบบพรีเมียม (Cyan Accent) และ Glassmorphism
-- **Interactive Diagram**: Ring Diagram แบบใหม่ เขียนด้วย SVG ให้ความคมชัดสูงและตอบสนองได้เร็วขึ้น
-- **State Management**: ใช้ React Context ในการจัดการข้อมูลผู้ใช้และสิทธิ์การเข้าถึง (Admin/Worker/Survey)
-- **Sidebar Navigation**: แยกเมนูการใช้งานชัดเจน (Dashboard, Planner, History)
+1. ใน Google Cloud Console เปิด **Google Sheets API** และตั้งค่า OAuth consent screen
+2. สร้าง OAuth client ประเภท **Web application** เพิ่ม Authorized JavaScript origin `https://tbm-web-app.vercel.app` (สำหรับทดสอบในเครื่องเพิ่ม `http://127.0.0.1:5176`)
+3. ใส่ Client ID ในเมนู **Google Sheets** ของเว็บ หรือกำหนด `VITE_GOOGLE_CLIENT_ID` ใน Vercel แล้ว deploy ใหม่
+4. แชร์ Google Sheet ทั้งสองไฟล์ให้บัญชี Google ของผู้ใช้ที่ต้องแก้ไขข้อมูล ถ้า OAuth consent screen ยังอยู่ในโหมด Testing ให้เพิ่มบัญชีนั้นเป็น test user ด้วย
+5. ลงชื่อเข้าใช้ Google ในเว็บ ชีตที่ว่างจะรับข้อมูลในเครื่องโดยอัตโนมัติ ถ้าชีตมีข้อมูลอยู่แล้วให้เลือก **อัปโหลดข้อมูลในเครื่อง** หรือ **ดึงข้อมูลจากชีต** ก่อนใช้งานร่วมกัน
 
-## 📦 การนำขึ้น GitHub
-- สร้าง Repository ใหม่ใน GitHub
-- Push โค้ดในโฟลเดอร์ `tbm-web-app` ขึ้นไป
-- ตั้งค่า **GitHub Pages** ให้ชี้ไปที่โฟลเดอร์ที่ Build แล้ว (แนะนำใช้ GitHub Actions เพื่อ Deploy อัตโนมัติ)
+เว็บไม่เก็บ OAuth access token ใน localStorage และไม่ใช้ service account key ในโค้ดหน้าเว็บ การเขียนลงชีตใช้สิทธิ์ของผู้ที่ลงชื่อเข้าใช้ และส่งข้อมูลแบบชุดเพื่อลดจำนวนคำขอ
 
----
-*MWA-9D TBM#34 Project Engineering Optimization*
+## พัฒนาและทดสอบ
+
+```bash
+npm install
+npm run dev -- --port 5176
+npm test
+npm run lint
+npm run build
+```
+
+ค่าตัวอย่างของ environment อยู่ใน `.env.example` การ push ไป branch `main` ใช้ deployment ของ Vercel ที่ผูกไว้กับ repository

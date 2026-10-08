@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { PageHeader, PlanInsight, StatCard, Field, ValidationErrors, InsightPanel } from '../components/PlannerUI';
 import LeadChart from '../components/LeadChart';
 import RecoveryChart from '../components/RecoveryChart';
@@ -37,7 +38,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [sections, setSections] = useState(() => {
     if (Array.isArray(savedSession.sections) && savedSession.sections.length) return savedSession.sections;
     try {
-      const saved = localStorage.getItem('tbm_horizontal_alignment');
+      const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`) || localStorage.getItem('tbm_horizontal_alignment');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -51,7 +52,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [vProfile, setVProfile] = useState(() => {
     if (Array.isArray(savedSession.vProfile) && savedSession.vProfile.length) return savedSession.vProfile;
     try {
-      const saved = localStorage.getItem('tbm_vertical_alignment');
+      const saved = localStorage.getItem(`tbm_vertical_alignment_${track}`) || localStorage.getItem('tbm_vertical_alignment');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -113,7 +114,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   };
 
   useEffect(() => {
-    try { localStorage.setItem(`tbm_advance_session_${track}`, JSON.stringify({ ...savedSession, sections, vProfile, strategy,
+    try { setProjectItem(`tbm_advance_session_${track}`, JSON.stringify({ ...savedSession, sections, vProfile, strategy,
       startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign })); }
     catch (error) { console.error('Cannot save track planning session', error); }
   }, [track, savedSession, sections, vProfile, strategy, startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign]);
@@ -215,8 +216,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   // Sync with Master Settings
   const handleLoadFromSettings = () => {
     try {
-      const savedH = localStorage.getItem('tbm_horizontal_alignment');
-      const savedV = localStorage.getItem('tbm_vertical_alignment');
+      const savedH = localStorage.getItem(`tbm_horizontal_alignment_${track}`) || localStorage.getItem('tbm_horizontal_alignment');
+      const savedV = localStorage.getItem(`tbm_vertical_alignment_${track}`) || localStorage.getItem('tbm_vertical_alignment');
       if (savedH) setSections(JSON.parse(savedH));
       if (savedV) setVProfile(JSON.parse(savedV));
       markDirty();
@@ -228,7 +229,8 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   const handleSaveToSettings = () => {
     try {
-      localStorage.setItem('tbm_horizontal_alignment', JSON.stringify(sections));
+      setProjectItem(`tbm_horizontal_alignment_${track}`, JSON.stringify(sections));
+      setProjectItem(`tbm_vertical_alignment_${track}`, JSON.stringify(vProfile));
       alert('บันทึกแนว Alignment ปัจจุบันไปยัง Master Settings เรียบร้อยแล้ว!');
     } catch (e) {
       alert('Error saving alignment: ' + e.message);

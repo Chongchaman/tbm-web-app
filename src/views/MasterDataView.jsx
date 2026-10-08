@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { PageHeader, Field, InsightPanel, ValidationErrors } from '../components/PlannerUI';
 import { validateAlignment, validateGapSettings } from '../services/decisionSupport';
 import { useState, useMemo } from 'react';
@@ -8,13 +9,13 @@ import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, createNewSectio
 
 
 
-export default function MasterDataView({ onNavigate = () => {} }) {
+export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   const [activeTab, setActiveTab] = useState('horizontal'); // 'horizontal' | 'vertical' | 'keys' | 'suitability' | 'simulator'
   
   // LocalStorage State for Horizontal Alignment
   const [hSections, setHSections] = useState(() => {
     try {
-      const saved = localStorage.getItem('tbm_horizontal_alignment');
+      const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`) || localStorage.getItem('tbm_horizontal_alignment');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
@@ -25,7 +26,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
   // LocalStorage State for Vertical Alignment
   const [vProfile, setVProfile] = useState(() => {
     try {
-      const saved = localStorage.getItem('tbm_vertical_alignment');
+      const saved = localStorage.getItem(`tbm_vertical_alignment_${track}`) || localStorage.getItem('tbm_vertical_alignment');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
@@ -64,7 +65,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
     if (alignmentErrors.length) { setValidationErrors(alignmentErrors); return false; }
     setValidationErrors([]);
     try {
-      localStorage.setItem('tbm_horizontal_alignment', JSON.stringify(hSections));
+      setProjectItem(`tbm_horizontal_alignment_${track}`, JSON.stringify(hSections));
       setSavedSuccessMsg('บันทึกการตั้งค่าแนวราบ (Horizontal Alignment) เรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 4000);
       return true;
@@ -78,7 +79,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
     if (alignmentErrors.length) { setValidationErrors(alignmentErrors); return false; }
     setValidationErrors([]);
     try {
-      localStorage.setItem('tbm_vertical_alignment', JSON.stringify(vProfile));
+      setProjectItem(`tbm_vertical_alignment_${track}`, JSON.stringify(vProfile));
       setSavedSuccessMsg('บันทึกการตั้งค่าแนวดิ่ง (Vertical Alignment) เรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 4000);
       return true;
@@ -91,7 +92,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
   const handleResetHAlignment = () => {
     if (window.confirm('รีเซ็ตแนวราบกลับเป็นค่ามาตรฐานตามแบบ Drawing (Sections 12", 13, 13A)?')) {
       setHSections(DEFAULT_ALIGNMENT_SECTIONS);
-      localStorage.setItem('tbm_horizontal_alignment', JSON.stringify(DEFAULT_ALIGNMENT_SECTIONS));
+      setProjectItem(`tbm_horizontal_alignment_${track}`, JSON.stringify(DEFAULT_ALIGNMENT_SECTIONS));
       setSavedSuccessMsg('รีเซ็ตแนวราบเป็นค่ามาตรฐานเรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 3000);
     }
@@ -101,7 +102,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
   const handleResetVAlignment = () => {
     if (window.confirm('รีเซ็ตแนวดิ่งกลับเป็นค่ามาตรฐานโปรไฟล์ของโครงการ?')) {
       setVProfile(DEFAULT_VERTICAL_ALIGNMENT);
-      localStorage.setItem('tbm_vertical_alignment', JSON.stringify(DEFAULT_VERTICAL_ALIGNMENT));
+      setProjectItem(`tbm_vertical_alignment_${track}`, JSON.stringify(DEFAULT_VERTICAL_ALIGNMENT));
       setSavedSuccessMsg('รีเซ็ตแนวดิ่งเป็นค่ามาตรฐานเรียบร้อยแล้ว!');
       setTimeout(() => setSavedSuccessMsg(''), 3000);
     }
@@ -181,7 +182,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
 
   return (
     <div className="stack pb-12">
-      <PageHeader eyebrow="Master data · Alignment & quantities" title="ข้อมูลแนว สัดส่วนผลิต และเซ็กเมนต์" description="จัดการแนวราบ แนวดิ่ง ชนิดคีย์ที่อนุญาต และยอดประมาณการผลิตในที่เดียว"/>
+      <PageHeader eyebrow={`Master data · ${track==='EB'?'TBM1 / E/B':'TBM2 / W/B'}`} title="ข้อมูลแนว สัดส่วนผลิต และเซ็กเมนต์" description="จัดการแนวราบ แนวดิ่ง ชนิดคีย์ที่อนุญาต และยอดประมาณการผลิตของเครื่องที่เลือก"/>
       <div className="tab-strip">{[['horizontal','แนวราบและ Ratio'],['vertical','แนวดิ่ง'],['keys','33 Key Database'],['suitability','Suitability Matrix'],['simulator','Taper Simulator']].map(([value,label])=><button key={value} aria-pressed={activeTab===value} onClick={()=>setActiveTab(value)}>{label}</button>)}</div>
 
       <InsightPanel level={alignmentErrors.length?'warning':'normal'} title={alignmentErrors.length?`พบ ${alignmentErrors.length} จุดในข้อมูลแนวที่ต้องแก้ไข`:'ตรวจโครงสร้างแนวและ Ratio แล้ว'}>
@@ -191,7 +192,7 @@ export default function MasterDataView({ onNavigate = () => {} }) {
       <ValidationErrors errors={validationErrors}/>
       <details className="advanced-options"><summary>เกณฑ์ Tail Gap ที่ใช้ร่วมกันทุกโหมด</summary><div className="form-grid">
         {[['initialGapTop','Gap เริ่มต้นบน (mm)'],['initialGapBottom','Gap เริ่มต้นล่าง (mm)'],['initialGapLeft','Gap เริ่มต้นซ้าย (mm)'],['initialGapRight','Gap เริ่มต้นขวา (mm)'],['warnThreshold','Gap เกณฑ์เตือน (mm)'],['criticalThreshold','Gap เกณฑ์วิกฤต (mm)']].map(([key,label])=><Field key={key} label={label}><input type="number" min="0" step=".1" value={gapSettings[key]} onChange={e=>setGapSettings(previous=>({...previous,[key]:e.target.value}))}/></Field>)}
-      </div><div className="page-actions mt-4"><button className="btn btn-acc" onClick={()=>{const errors=validateGapSettings(gapSettings);if(errors.length){setValidationErrors(errors);return;}try{localStorage.setItem('tbm_gap_settings',JSON.stringify(gapSettings));setValidationErrors([]);setSavedSuccessMsg('บันทึกเกณฑ์ Gap สำหรับทุกโหมดแล้ว');}catch{setValidationErrors(['บันทึกเกณฑ์ Gap ในเครื่องไม่สำเร็จ']);}}}>บันทึกเกณฑ์ Gap</button></div><p className="section-note mt-3">ค่าตั้งต้น Nominal 50 mm · เตือน ≤15 mm · วิกฤต ≤5 mm · แบบจำลองคาดการณ์ 0–100 mm</p></details>
+      </div><div className="page-actions mt-4"><button className="btn btn-acc" onClick={()=>{const errors=validateGapSettings(gapSettings);if(errors.length){setValidationErrors(errors);return;}try{setProjectItem('tbm_gap_settings',JSON.stringify(gapSettings));setValidationErrors([]);setSavedSuccessMsg('บันทึกเกณฑ์ Gap สำหรับทุกโหมดแล้ว');}catch{setValidationErrors(['บันทึกเกณฑ์ Gap ในเครื่องไม่สำเร็จ']);}}}>บันทึกเกณฑ์ Gap</button></div><p className="section-note mt-3">ค่าตั้งต้น Nominal 50 mm · เตือน ≤15 mm · วิกฤต ≤5 mm · แบบจำลองคาดการณ์ 0–100 mm</p></details>
 
       {/* Success Notification */}
       {savedSuccessMsg && (

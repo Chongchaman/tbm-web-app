@@ -1,3 +1,4 @@
+import { setProjectItem } from '../services/googleSheetsService';
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Save } from 'lucide-react';
 import { PageHeader, Field, StatCard, PlanInsight, StatusBadge, ValidationErrors } from '../components/PlannerUI';
@@ -12,7 +13,7 @@ export default function SequencePlanner({ringLogs=[],onBatchSave=async()=>{},the
   const baseline=latestMeasured(ringLogs)||ringLogs.at(-1);
   const [form,setForm]=useState(()=>readStored(`tbm_sequence_session_${track}`,{startRingNum:nextRingNumber(ringLogs),startKey:baseline?.key||'L2',startHLead:baseline?.hLead??0,startVLead:baseline?.vLead??0,alignmentType:'right',radius:500,ringCount:10,targetV:0,leadLimit:55,lookaheadDepth:3}));
   const [allowedTypes,setAllowedTypes]=useState(()=>readStored(`tbm_sequence_types_${track}`,['U','R','L']));
-  useEffect(()=>{try{localStorage.setItem(`tbm_sequence_session_${track}`,JSON.stringify(form));localStorage.setItem(`tbm_sequence_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
+  useEffect(()=>{try{setProjectItem(`tbm_sequence_session_${track}`,JSON.stringify(form));setProjectItem(`tbm_sequence_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
   const [gapSettings]=useState(()=>readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS));
   const [selection,setSelection]=useState(1);
   const [onlyIssues,setOnlyIssues]=useState(false);
