@@ -75,6 +75,14 @@ test('sequence planner is deterministic, preserves transitions, and sums actual 
  assert.throws(()=>runAutoPlan({...input,allowedTypes:['X']}));
 });
 
+test('straight planning alternates left and right tapered rings when both are enabled',()=>{
+ const plan=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:10,alignmentType:'straight',allowedTypes:['U','R','L']});
+ let expected='R';
+ for(const ring of plan.plannedRings){assert.equal(ring.type,expected);assert.equal(ring.planningRule,'alternate-lr');expected=expected==='R'?'L':'R';}
+ assert.ok(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).every(candidate=>candidate.type==='L'));
+ assert.ok(evaluateCandidates({beforeKey:'L2',alignmentType:'straight',allowedTypes:['L']}).every(candidate=>candidate.type==='L'));
+});
+
 test('sequence visual joins saved plans to the new plan with continuous curve geometry',()=>{
  const history=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:3,alignmentType:'right',radius:180}).plannedRings;
  const current=runAutoPlan({startRingNum:'R0004',startKey:history.at(-1).selectedKey,startHLead:history.at(-1).afterH,startVLead:history.at(-1).afterV,ringCount:2,alignmentType:'left',radius:300}).plannedRings;
