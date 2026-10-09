@@ -10,6 +10,7 @@ import { calculateFoamConsumption, calculatePolymerConsumption, calculateCurveOf
 import { recordRow, parseRecordRows } from '../src/services/googleSheetsService.js';
 import { DEFAULT_RECOVERY, recoveryTarget, createRoute, initialRecoveryState, propagateRecovery, endpointAssessment, radians } from '../src/services/alignmentRecovery.js';
 import { buildSequenceVisualPlan } from '../src/services/sequenceVisual.js';
+import { STRAIGHT_ANTI_ROLL_CYCLE, validateStraightAntiRollCycle } from '../src/services/straightRolling.js';
 
 const normal = {hLead:0,vLead:0,gapT:50,gapB:50,gapL:50,gapR:50,suitability:'Yes'};
 const section = { ...DEFAULT_ALIGNMENT_SECTIONS[0], code:'TEST', startSTA:'00+000.000', endSTA:'00+015.000', ratio:{un:1,rt:1,lt:1}, allowedTypes:['U','R','L'] };
@@ -75,12 +76,26 @@ test('sequence planner is deterministic, preserves transitions, and sums actual 
  assert.throws(()=>runAutoPlan({...input,allowedTypes:['X']}));
 });
 
-test('straight planning alternates left and right tapered rings when both are enabled',()=>{
- const plan=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:10,alignmentType:'straight',allowedTypes:['U','R','L']});
- let expected='R';
- for(const ring of plan.plannedRings){assert.equal(ring.type,expected);assert.equal(ring.planningRule,'alternate-lr');expected=expected==='R'?'L':'R';}
- assert.ok(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).every(candidate=>candidate.type==='L'));
+test('straight planning follows a varied neutral LT/RT cycle to control rolling',()=>{
+ assert.equal(validateStraightAntiRollCycle(),true);
+ const plan=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:20,alignmentType:'straight',allowedTypes:['U','R','L']});
+ let previous='L2';
+ for(const ring of plan.plannedRings){
+  const expected=STRAIGHT_ANTI_ROLL_CYCLE[(STRAIGHT_ANTI_ROLL_CYCLE.indexOf(previous)+1)%STRAIGHT_ANTI_ROLL_CYCLE.length];
+  assert.equal(ring.key,expected);assert.equal(ring.planningRule,'anti-roll-lr-cycle');previous=ring.key;
+ }
+ assert.ok(new Set(plan.plannedRings.map(ring=>ring.key)).size>=10);
+ assert.deepEqual(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).map(candidate=>candidate.key),['L15']);
  assert.ok(evaluateCandidates({beforeKey:'L2',alignmentType:'straight',allowedTypes:['L']}).every(candidate=>candidate.type==='L'));
+});
+
+test('continuous straight planning changes key loops instead of repeating A-B-A-B',()=>{
+ const straight={...section,code:'ANTI-ROLL',sectionType:'tangent',direction:'straight',radius:0,startSTA:'00+000.000',endSTA:'00+042.000',ratio:{un:0,rt:1,lt:1},allowedTypes:['R','L']};
+ const vertical={code:'FLAT-ANTI-ROLL',curveType:'constant_grade',startSTA:straight.startSTA,endSTA:straight.endSTA,startElev:0,endElev:0,gradePct:0,radiusV:0};
+ const plan=runAdvancePlan({sections:[straight],verticalAlignment:[vertical],startKey:'L15',startHLead:0,startVLead:0,recovery:{initialStateConfirmed:true}});
+ const keys=plan.plannedRings.map(ring=>ring.selectedKey);
+ for(let index=3;index<keys.length;index++) assert.notDeepEqual(keys.slice(index-3,index+1),[keys[index-1],keys[index],keys[index-1],keys[index]]);
+ assert.ok(plan.plannedRings.every(ring=>ring.rolling));
 });
 
 test('sequence visual joins saved plans to the new plan with continuous curve geometry',()=>{

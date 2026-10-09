@@ -3,6 +3,7 @@ import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConsta
 import { getAdaptiveWeights } from './aiCalibrator.js';
 import { DEFAULT_RECOVERY, validateRecovery, createRoute, initialRecoveryState, propagateRecovery, recoveryTarget, endpointAssessment, radians, degrees, rounded } from './alignmentRecovery.js';
 import { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
+import { straightAntiRollEnabled, straightAntiRollMeta } from './straightRolling.js';
 
 export { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
 
@@ -177,7 +178,7 @@ export function runAdvancePlan({
   for(const [from,to] of coveredVertical) {if(from>coveredTo+.000001)break;if(to>coveredTo)coveredTo=to;}
   const verticalKnown=coveredTo>=Math.max(route.staAt(0),route.staAt(route.totalDistance)) && verticalAlignment.length>0;
   let current={...initialRecoveryState(route,config),key:startKey,h:Number(startHLead),v:Number(startVLead),
-    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}]))};
+    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}])),recentKeys:[]};
   const plannedRings=[],violations=[],gapAlerts=[];
   const targetAt=distance=>({
     h:recoveryTarget(distance,recoveryLength,Number(config.startDeviationH),radians(Number(config.startHeadingErrorDeg))),
@@ -186,6 +187,8 @@ export function runAdvancePlan({
   const evaluate=(state,key)=>{
     const data=KEY_DATA[key], size=SEGMENT_SIZES[data.type], sizeM=size/1000;
     const sec=route.at(state.distance).section;
+    const antiRollEnabled=straightAntiRollEnabled(sec.sectionType==='tangent'||sec.direction==='straight'?'straight':sec.direction,sec.allowedTypes||['U','R','L']);
+    const rolling=antiRollEnabled?straightAntiRollMeta(state.key,key,state.recentKeys):null;
     const turnH=-data.hLead/responseDiameter,turnV=-data.vLead/responseDiameter;
     const projected=propagateRecovery(state,route,sizeM,turnH,turnV);
     const leadReq=responseDiameter*(projected.dtaTheta-state.dtaTheta);
@@ -222,13 +225,22 @@ export function runAdvancePlan({
       (Math.max(0,Math.abs(projected.deviationH)-Number(config.endpointToleranceMm))+Math.max(0,Math.abs(projected.deviationV)-Number(config.endpointToleranceMm))+Math.max(0,Math.abs(projected.longitudinalDeviation)-Number(config.endpointToleranceMm)))*10000+
       (Math.max(0,Math.abs(degrees(projected.headingError))-Number(config.endpointHeadingToleranceDeg))+Math.max(0,Math.abs(degrees(projected.pitchError))-Number(config.endpointHeadingToleranceDeg)))*1000000 : 0;
     const outsideAlignmentCost=(Math.max(0,Math.abs(projected.deviationH)-limits.deviation)+Math.max(0,Math.abs(projected.deviationV)-limits.deviation))*3000;
-    const cost=hardCost+softCost+alignmentCost+outsideAlignmentCost+terminalCost+leadCost+ratioCost+endpointCost;
+    const recoveryActive=Math.abs(Number(config.startDeviationH))>0.5||Math.abs(Number(config.startDeviationV))>0.5||
+      Math.abs(Number(config.startHeadingErrorDeg))>0.001||Math.abs(Number(config.startPitchErrorDeg))>0.001;
+    // Alignment recovery wins while a measured correction is active. Once the
+    // plan starts on alignment, the full anti-roll preference controls ties.
+    // Continuous planning may need to leave the ideal nine-pair cycle to
+    // recover alignment. It still blocks an immediate A-B-A-B loop and gently
+    // spreads recently used key positions.
+    const rollingPreference=rolling?(rolling.alternationPenalty+rolling.recentKeyPenalty+rolling.repeatedPairPenalty):0;
+    const rollingCost=rollingPreference*(recoveryActive?0.1:1);
+    const cost=hardCost+softCost+alignmentCost+outsideAlignmentCost+terminalCost+leadCost+ratioCost+endpointCost+rollingCost;
     const nextUsed={...state.used,[sec.code]:{...used,[data.type]:used[data.type]+1}};
     return {key,type:data.type,size,sizeM:sizeM.toFixed(1),segHLead:data.hLead,segVLead:data.vLead,
       leadReq:rounded(leadReq,2),vLeadReq:rounded(vLeadReq,2),afterH,afterV,suitability,...gaps,minGap,
       exceedsLimit:overLimitAmount>0,overLimitAmount:rounded(overLimitAmount,2),isGapWarn:minGap<=gConfig.warnThreshold,
       isGapCrit:minGap<=gConfig.criticalThreshold,articulationDeg:rounded(articulationDeg),taperTurnDeg:rounded(articulationDeg),articulationExceeded:articulationDeg>Number(config.maxTaperTurnDeg),
-      target,cost,totalScore:rounded(-cost,2),projected:{...projected,key,h:afterH,v:afterV,used:nextUsed}};
+      target,cost,totalScore:rounded(-cost,2),rolling,rollingCost,projected:{...projected,key,h:afterH,v:afterV,used:nextUsed,recentKeys:[...state.recentKeys,key].slice(-18)}};
   };
   const candidates=state=>(NEXT_RING_TABLE[state.key]||[]).filter(key=>{
     const type=KEY_DATA[key].type,start=route.startOffset+state.distance;
@@ -264,7 +276,8 @@ export function runAdvancePlan({
     const remaining=Math.max(0,route.totalDistance-next.distance);
     const {projected:ignoredProjected,target:ignoredTarget,...fields}=chosen;
     void ignoredProjected;void ignoredTarget;
-    const aiReasoning=`${driftTrend==='converging'?'กำลังกลับเข้าแนว':driftTrend==='diverging'?'ยังเยื้องเพิ่ม — ต้องตรวจทาน':'ระยะเยื้องคงที่'} · H/V คาดการณ์ ${rounded(next.deviationH,1)}/${rounded(next.deviationV,1)} mm · มุมคลาด H/V ${rounded(degrees(next.headingError),3)}/${rounded(degrees(next.pitchError),3)}° · เหลือ ${rounded(remaining,1)} m`;
+    const antiRollReason=chosen.rolling?`Anti-Roll กระจายตำแหน่งคีย์ ${chosen.rolling.cycleStep||'นอกลูป'}/${chosen.rolling.pairCount}${chosen.rolling.followsCycle?'':' · ปรับตามแนว/Gap'} · `:'';
+    const aiReasoning=`${antiRollReason}${driftTrend==='converging'?'กำลังกลับเข้าแนว':driftTrend==='diverging'?'ยังเยื้องเพิ่ม — ต้องตรวจทาน':'ระยะเยื้องคงที่'} · H/V คาดการณ์ ${rounded(next.deviationH,1)}/${rounded(next.deviationV,1)} mm · มุมคลาด H/V ${rounded(degrees(next.headingError),3)}/${rounded(degrees(next.pitchError),3)}° · เหลือ ${rounded(remaining,1)} m`;
     const ring={...fields,recordType:'planned',initialStateConfirmed:config.initialStateConfirmed===true,initialPoseSTA:formatSTA(route.staAt(0)),step,ringNum,ringNumInt,sta:formatSTA(route.staAt(current.distance)),
       endSTA:formatSTA(route.staAt(next.distance)),dist:rounded(current.distance,3),sectionCode:sec.code,sectionName:sec.name,sectionType:sec.sectionType,
       prevKey:current.key,selectedKey:chosen.key,startX:rounded(current.tbmX),startY:rounded(current.tbmY),endX:rounded(next.tbmX),endY:rounded(next.tbmY),
