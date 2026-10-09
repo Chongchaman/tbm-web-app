@@ -36,6 +36,8 @@ export function straightAntiRollMeta(previousKey, candidateKey, recentKeys = [])
   const recent = recentKeys.slice(-18);
   const lastUseDistance = [...recent].reverse().findIndex(key => key === candidateKey);
   const repeatsPair = recent.length >= 2 && recent.at(-2) === candidateKey && recent.at(-1) === previousKey;
+  let sameTypeRun = 1;
+  for (let index=recent.length-1; index>=0 && KEY_DATA[recent[index]]?.type===candidateType; index--) sameTypeRun++;
 
   // This is a preference, not a safety override. Hard Gap, suitability and
   // alignment constraints in the planner still carry much larger costs.
@@ -43,14 +45,15 @@ export function straightAntiRollMeta(previousKey, candidateKey, recentKeys = [])
   const cyclePenalty = expectedKey && !followsCycle ? 2_500 : 0;
   const recentKeyPenalty = lastUseDistance >= 0 && lastUseDistance < 8 ? (8 - lastUseDistance) * 450 : 0;
   const repeatedPairPenalty = repeatsPair ? 20_000 : 0;
-  const penalty = alternationPenalty + cyclePenalty + recentKeyPenalty + repeatedPairPenalty;
+  const longSameTypePenalty = sameTypeRun > 2 ? (sameTypeRun - 2) * 20_000 : 0;
+  const penalty = alternationPenalty + cyclePenalty + recentKeyPenalty + repeatedPairPenalty + longSameTypePenalty;
 
   return {
     expectedKey,
     followsCycle,
     alternatesType,
     repeatsPair,
-    penalty, alternationPenalty, cyclePenalty, recentKeyPenalty, repeatedPairPenalty,
+    penalty, alternationPenalty, cyclePenalty, recentKeyPenalty, repeatedPairPenalty, longSameTypePenalty, sameTypeRun,
     cycleStep: cycleIndex < 0 ? null : Math.floor(cycleIndex / 2) + 1,
     pairCount: STRAIGHT_ANTI_ROLL_PAIR_COUNT,
   };

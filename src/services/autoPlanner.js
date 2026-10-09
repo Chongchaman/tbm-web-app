@@ -15,23 +15,23 @@ export function runAutoPlan({startRingNum='R0016',startKey='L2',startHLead=38.39
   if(!Array.isArray(allowedTypes) || !allowedTypes.length || allowedTypes.some(type=>!['U','R','L'].includes(type))) errors.push('ต้องอนุญาตเซ็กเมนต์อย่างน้อย 1 ชนิด');
   if(errors.length) throw new Error(errors.join(' · '));
   const count=Number(ringCount), start=Number(String(startRingNum).replace(/^R/i,''));
-  let currentKey=startKey,currentH=Number(startHLead),currentV=Number(startVLead);
+  let currentKey=startKey,currentH=Number(startHLead),currentV=Number(startVLead),recentKeys=[startKey];
   const plannedRings=[];
   for(let step=1;step<=count;step++) {
-    let beams=[{key:currentKey,h:currentH,v:currentV,cost:0,first:null}];
+    let beams=[{key:currentKey,h:currentH,v:currentV,cost:0,first:null,recentKeys}];
     const depth=Math.min(3,Math.max(1,Number(lookaheadDepth)),count-step+1);
     for(let d=0;d<depth;d++) {
       const next=[];
       for(const beam of beams) {
-        const candidates=evaluateCandidates({beforeKey:beam.key,beforeHLead:beam.h,beforeVLead:beam.v,alignmentType,radius,targetV,targetMode:'alignment',leadLimit,gapSettings,allowedTypes,lookahead:false});
-        for(const candidate of candidates) next.push({key:candidate.key,h:candidate.afterHLead,v:candidate.afterVLead,cost:beam.cost+candidate.cost,first:beam.first||candidate});
+        const candidates=evaluateCandidates({beforeKey:beam.key,beforeHLead:beam.h,beforeVLead:beam.v,alignmentType,radius,targetV,targetMode:'alignment',leadLimit,gapSettings,allowedTypes,lookahead:false,recentKeys:beam.recentKeys});
+        for(const candidate of candidates) next.push({key:candidate.key,h:candidate.afterHLead,v:candidate.afterVLead,cost:beam.cost+candidate.cost,first:beam.first||candidate,recentKeys:[...beam.recentKeys,candidate.key].slice(-18)});
       }
       beams=next.sort((a,b)=>a.cost-b.cost).slice(0,6);
       if(!beams.length) throw new Error(`ไม่มีคีย์ต่อเนื่องที่ใช้ได้ในริง ${step} ภายใต้ชนิดเซ็กเมนต์ที่อนุญาต`);
     }
     const best=beams[0].first;
     plannedRings.push({...best,step,ringNum:`R${String(start+step-1).padStart(4,'0')}`,selectedKey:best.key,prevKey:currentKey,afterH:best.afterHLead,afterV:best.afterVLead,totalDrift:best.drift,driftH:round(best.afterHLead-best.targetH),driftV:round(best.afterVLead-Number(targetV)),recordType:'planned',notes:`Auto Planned (Step ${step}) · ${depth}-ring lookahead · ${best.reason}`});
-    currentKey=best.key;currentH=best.afterHLead;currentV=best.afterVLead;
+    currentKey=best.key;currentH=best.afterHLead;currentV=best.afterVLead;recentKeys=[...recentKeys,best.key].slice(-18);
   }
   return {plannedRings,ringCount:count,alignmentType,radius:Number(radius),leadRequest:calculateLeadRequest({alignmentType,radius,segWidth:1400}),totalDistanceM:round(plannedRings.reduce((sum,r)=>sum+r.sizeM,0)),maxDrift:Math.max(...plannedRings.map(r=>r.totalDrift)),avgDrift:round(plannedRings.reduce((sum,r)=>sum+r.totalDrift,0)/count),rCount:plannedRings.filter(r=>r.type==='R').length,lCount:plannedRings.filter(r=>r.type==='L').length,uCount:plannedRings.filter(r=>r.type==='U').length,summary:summarizeRings(plannedRings,{...getLimits(gapSettings),lead:Number(leadLimit)})};
 }

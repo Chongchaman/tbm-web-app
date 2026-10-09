@@ -76,16 +76,20 @@ test('sequence planner is deterministic, preserves transitions, and sums actual 
  assert.throws(()=>runAutoPlan({...input,allowedTypes:['X']}));
 });
 
-test('straight planning follows a varied neutral LT/RT cycle to control rolling',()=>{
+test('straight planning varies key loops and may double a type to correct lead',()=>{
  assert.equal(validateStraightAntiRollCycle(),true);
+ assert.equal(STRAIGHT_ANTI_ROLL_CYCLE.length,18);
  const plan=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:20,alignmentType:'straight',allowedTypes:['U','R','L']});
- let previous='L2';
- for(const ring of plan.plannedRings){
-  const expected=STRAIGHT_ANTI_ROLL_CYCLE[(STRAIGHT_ANTI_ROLL_CYCLE.indexOf(previous)+1)%STRAIGHT_ANTI_ROLL_CYCLE.length];
-  assert.equal(ring.key,expected);assert.equal(ring.planningRule,'anti-roll-lr-cycle');previous=ring.key;
- }
- assert.ok(new Set(plan.plannedRings.map(ring=>ring.key)).size>=10);
- assert.deepEqual(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).map(candidate=>candidate.key),['L15']);
+ assert.ok(plan.plannedRings.every(ring=>ring.planningRule==='adaptive-anti-roll'));
+ assert.ok(new Set(plan.plannedRings.map(ring=>ring.key)).size>=6);
+ const keys=['L2',...plan.plannedRings.map(ring=>ring.key)];
+ for(let index=3;index<keys.length;index++) assert.notDeepEqual(keys.slice(index-3,index+1),[keys[index-1],keys[index],keys[index-1],keys[index]]);
+ const correction=runAutoPlan({startRingNum:'R0001',startKey:'L15',startHLead:-55.43,startVLead:-22.96,ringCount:2,alignmentType:'straight',allowedTypes:['U','R','L']});
+ assert.equal(correction.plannedRings[0].type,'L');
+ assert.match(correction.plannedRings[0].reason,/เบิ้ล LT เพื่อแก้ Lead/);
+ const correctionTypes=['L',...runAutoPlan({startRingNum:'R0001',startKey:'L15',startHLead:-55.43,startVLead:-22.96,ringCount:12,alignmentType:'straight',allowedTypes:['U','R','L']}).plannedRings.map(r=>r.type)];
+ for(let index=2;index<correctionTypes.length;index++) assert.notDeepEqual(correctionTypes.slice(index-2,index+1),[correctionTypes[index],correctionTypes[index],correctionTypes[index]]);
+ assert.ok(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).some(candidate=>candidate.type==='R'));
  assert.ok(evaluateCandidates({beforeKey:'L2',alignmentType:'straight',allowedTypes:['L']}).every(candidate=>candidate.type==='L'));
 });
 

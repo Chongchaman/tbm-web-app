@@ -1,21 +1,18 @@
 import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConstants.js';
 import { predictGaps, assessRing, getLimits, SEGMENT_WIDTHS, round } from './decisionSupport.js';
-import { preferredStraightKeys, straightAntiRollEnabled, straightAntiRollMeta } from './straightRolling.js';
+import { straightAntiRollEnabled, straightAntiRollMeta } from './straightRolling.js';
 
 /** Auditable deterministic ranking. Safety checks outrank short-term target drift. */
-export function evaluateCandidates({ beforeKey='R13', beforeHLead=0, beforeVLead=0, curveHLead=0, curveVLead=0, alignmentType, radius=0, targetH=0, targetV=0, targetMode='fixed', leadLimit=55, gapSettings={}, lookahead=true, allowedTypes=['U','R','L'] }={}) {
+export function evaluateCandidates({ beforeKey='R13', beforeHLead=0, beforeVLead=0, curveHLead=0, curveVLead=0, alignmentType, radius=0, targetH=0, targetV=0, targetMode='fixed', leadLimit=55, gapSettings={}, lookahead=true, allowedTypes=['U','R','L'], recentKeys=[] }={}) {
   if(!KEY_DATA[beforeKey]) return [];
   const limits={...getLimits(gapSettings),lead:Number(leadLimit)};
   const alternateStraight=straightAntiRollEnabled(alignmentType,allowedTypes);
   const keysFor=previousKey=>{
     const available=(NEXT_RING_TABLE[previousKey]||[]).filter(key=>allowedTypes.includes(KEY_DATA[key].type));
     if(!alternateStraight) return available;
-    const preferred=preferredStraightKeys(previousKey,available);
-    if(preferred.length) return preferred;
-    const previousType=KEY_DATA[previousKey]?.type;
-    return available.filter(key=>previousType==='L'?KEY_DATA[key].type==='R':previousType==='R'?KEY_DATA[key].type==='L':['L','R'].includes(KEY_DATA[key].type));
+    return available.filter(key=>['L','R'].includes(KEY_DATA[key].type));
   };
-  function candidatesFor(previousKey,h,v) {
+  function candidatesFor(previousKey,h,v,history=recentKeys) {
     return keysFor(previousKey).map(key=>{
       const data=KEY_DATA[key];
       const width=SEGMENT_WIDTHS[data.type];
@@ -30,17 +27,19 @@ export function evaluateCandidates({ beforeKey='R13', beforeHLead=0, beforeVLead
       const excess=Math.max(0,assessment.leadMax-limits.lead);
       const hard=assessment.issues.filter(i=>i.level==='critical').length;
       const warning=assessment.issues.filter(i=>i.level==='warning').length;
-      const cost=hard*100000+warning*1000+excess*25+drift+(suitability==='Fair'?40:0);
-      const rolling=alternateStraight?straightAntiRollMeta(previousKey,key):null;
-      return { key,type:data.type,pos:data.pos,angle:data.angle,size:width,sizeM:width/1000,leadReq,targetH:horizontalTarget,targetV:Number(targetV),segHLead:data.hLead,segVLead:data.vLead,afterHLead,afterVLead,suitability,drift,cost,assessment,rolling,...gaps };
+      const rolling=alternateStraight?straightAntiRollMeta(previousKey,key,history):null;
+      const rollingCost=rolling?(rolling.recentKeyPenalty+rolling.repeatedPairPenalty+rolling.longSameTypePenalty):0;
+      const cost=hard*100000+warning*1000+excess*25+drift+(suitability==='Fair'?40:0)+rollingCost;
+      return { key,type:data.type,pos:data.pos,angle:data.angle,size:width,sizeM:width/1000,leadReq,targetH:horizontalTarget,targetV:Number(targetV),segHLead:data.hLead,segVLead:data.vLead,afterHLead,afterVLead,suitability,drift,cost,assessment,rolling,rollingCost,...gaps };
     });
   }
   const evaluated=candidatesFor(beforeKey,beforeHLead,beforeVLead).map(candidate=>{
-    const future=lookahead?candidatesFor(candidate.key,candidate.afterHLead,candidate.afterVLead):[];
+    const future=lookahead?candidatesFor(candidate.key,candidate.afterHLead,candidate.afterVLead,[...recentKeys,candidate.key].slice(-18)):[];
     const nextCost=future.length?Math.min(...future.map(c=>c.cost)):lookahead?1000000:0;
     const totalCost=candidate.cost+nextCost*.35;
-    const reason=[...(alternateStraight?[`Anti-Roll LT/RT คู่ ${candidate.rolling?.cycleStep||'เริ่มต้น'}/${candidate.rolling?.pairCount||9}`]:[]),`Suitability ${candidate.suitability}`,`Lead H/V ${candidate.afterHLead}/${candidate.afterVLead} mm`,`Gap คาดการณ์ต่ำสุด ${candidate.assessment.minGap} mm`,`ห่างเป้าหมาย ${candidate.drift} mm`,...(lookahead?['ประเมินทางเลือกของริงถัดไปด้วย']:[])].join(' · ');
-    return {...candidate,totalCost,rankScore:round(100-totalCost),reason,nextCost,planningRule:alternateStraight?'anti-roll-lr-cycle':'optimized'};
+    const doublesType=alternateStraight&&KEY_DATA[beforeKey]?.type===candidate.type;
+    const reason=[...(alternateStraight?[doublesType?`เบิ้ล ${candidate.type==='R'?'RT':'LT'} เพื่อแก้ Lead`:'สลับ RT/LT','Anti-Roll เปลี่ยนตำแหน่งคีย์']:[]),`Suitability ${candidate.suitability}`,`Lead H/V ${candidate.afterHLead}/${candidate.afterVLead} mm`,`Gap คาดการณ์ต่ำสุด ${candidate.assessment.minGap} mm`,`ห่างเป้าหมาย ${candidate.drift} mm`,...(lookahead?['ประเมินทางเลือกของริงถัดไปด้วย']:[])].join(' · ');
+    return {...candidate,totalCost,rankScore:round(100-totalCost),reason,nextCost,planningRule:alternateStraight?'adaptive-anti-roll':'optimized'};
   });
   return evaluated.sort((a,b)=>a.totalCost-b.totalCost || a.drift-b.drift || a.key.localeCompare(b.key));
 }

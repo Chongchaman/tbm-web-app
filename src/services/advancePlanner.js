@@ -178,7 +178,7 @@ export function runAdvancePlan({
   for(const [from,to] of coveredVertical) {if(from>coveredTo+.000001)break;if(to>coveredTo)coveredTo=to;}
   const verticalKnown=coveredTo>=Math.max(route.staAt(0),route.staAt(route.totalDistance)) && verticalAlignment.length>0;
   let current={...initialRecoveryState(route,config),key:startKey,h:Number(startHLead),v:Number(startVLead),
-    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}])),recentKeys:[]};
+    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}])),recentKeys:[startKey]};
   const plannedRings=[],violations=[],gapAlerts=[];
   const targetAt=distance=>({
     h:recoveryTarget(distance,recoveryLength,Number(config.startDeviationH),radians(Number(config.startHeadingErrorDeg))),
@@ -232,8 +232,8 @@ export function runAdvancePlan({
     // Continuous planning may need to leave the ideal nine-pair cycle to
     // recover alignment. It still blocks an immediate A-B-A-B loop and gently
     // spreads recently used key positions.
-    const rollingPreference=rolling?(rolling.alternationPenalty+rolling.recentKeyPenalty+rolling.repeatedPairPenalty):0;
-    const rollingCost=rollingPreference*(recoveryActive?0.1:1);
+    const rollingPreference=rolling?(rolling.recentKeyPenalty+rolling.repeatedPairPenalty):0;
+    const rollingCost=rollingPreference*(recoveryActive?0.1:1)+(rolling?.longSameTypePenalty||0);
     const cost=hardCost+softCost+alignmentCost+outsideAlignmentCost+terminalCost+leadCost+ratioCost+endpointCost+rollingCost;
     const nextUsed={...state.used,[sec.code]:{...used,[data.type]:used[data.type]+1}};
     return {key,type:data.type,size,sizeM:sizeM.toFixed(1),segHLead:data.hLead,segVLead:data.vLead,
@@ -276,7 +276,8 @@ export function runAdvancePlan({
     const remaining=Math.max(0,route.totalDistance-next.distance);
     const {projected:ignoredProjected,target:ignoredTarget,...fields}=chosen;
     void ignoredProjected;void ignoredTarget;
-    const antiRollReason=chosen.rolling?`Anti-Roll กระจายตำแหน่งคีย์ ${chosen.rolling.cycleStep||'นอกลูป'}/${chosen.rolling.pairCount}${chosen.rolling.followsCycle?'':' · ปรับตามแนว/Gap'} · `:'';
+    const doublesType=chosen.rolling&&KEY_DATA[current.key]?.type===chosen.type;
+    const antiRollReason=chosen.rolling?`${doublesType?`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อแก้ Lead/แนว`:'สลับ RT/LT'} · Anti-Roll เปลี่ยนตำแหน่งคีย์ · `:'';
     const aiReasoning=`${antiRollReason}${driftTrend==='converging'?'กำลังกลับเข้าแนว':driftTrend==='diverging'?'ยังเยื้องเพิ่ม — ต้องตรวจทาน':'ระยะเยื้องคงที่'} · H/V คาดการณ์ ${rounded(next.deviationH,1)}/${rounded(next.deviationV,1)} mm · มุมคลาด H/V ${rounded(degrees(next.headingError),3)}/${rounded(degrees(next.pitchError),3)}° · เหลือ ${rounded(remaining,1)} m`;
     const ring={...fields,recordType:'planned',initialStateConfirmed:config.initialStateConfirmed===true,initialPoseSTA:formatSTA(route.staAt(0)),step,ringNum,ringNumInt,sta:formatSTA(route.staAt(current.distance)),
       endSTA:formatSTA(route.staAt(next.distance)),dist:rounded(current.distance,3),sectionCode:sec.code,sectionName:sec.name,sectionType:sec.sectionType,
