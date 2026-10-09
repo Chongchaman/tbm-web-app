@@ -42,7 +42,7 @@ export default function SegmentPlanningWorkspace({
   handleCalculate, handleBatchSave, handleExportCSV, handleResetSections,
   currentSTA, changeCurrentSTA, recovery, changeRecovery, strategy, changeStrategy,
   startKey, changeStartKey, startHLead, changeStartHLead, startVLead, changeStartVLead,
-  maxTolerance, changeMaxTolerance, steeringSign, changeSteeringSign,
+  maxTolerance, changeMaxTolerance, maxPairLoops, changeMaxPairLoops, steeringSign, changeSteeringSign,
   planResult, summary, sections, resultFilter, setResultFilter, tableRings,
   scrubStep, setScrubStep, selectedRing,
 }) {
@@ -76,6 +76,7 @@ export default function SegmentPlanningWorkspace({
           <Field label="H Lead เริ่มต้น"><input type="number" step="0.1" value={startHLead} onChange={event=>changeStartHLead(event.target.value)}/></Field>
           <Field label="V Lead เริ่มต้น"><input type="number" step="0.1" value={startVLead} onChange={event=>changeStartVLead(event.target.value)}/></Field>
           <Field label="Lead Limit ± (mm)"><input type="number" value={maxTolerance} onChange={event=>changeMaxTolerance(event.target.value)}/></Field>
+          <Field label="ลูปคู่เดิมสูงสุด (รอบ)"><input type="number" min="1" max="10" step="1" value={maxPairLoops} onChange={event=>changeMaxPairLoops(event.target.value)}/></Field>
           <Field label="เป้าหมายการเลี้ยว"><select value={steeringSign} onChange={event=>changeSteeringSign(event.target.value)}><option value="steering_bias">ตรงข้าม Lead โค้ง</option><option value="standard_positive">ตาม Lead โค้ง</option></select></Field>
         </div>
         <label className="planner-survey-confirm"><input type="checkbox" checked={recovery.initialStateConfirmed} onChange={event=>changeRecovery('initialStateConfirmed',event.target.checked)}/>ยืนยันค่าตำแหน่งและมุมจาก Survey / Navigation</label>

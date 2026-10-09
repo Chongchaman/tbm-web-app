@@ -3,7 +3,7 @@ import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConsta
 import { getAdaptiveWeights } from './aiCalibrator.js';
 import { DEFAULT_RECOVERY, validateRecovery, createRoute, initialRecoveryState, propagateRecovery, recoveryTarget, endpointAssessment, radians, degrees, rounded } from './alignmentRecovery.js';
 import { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
-import { straightAntiRollEnabled, straightAntiRollMeta } from './straightRolling.js';
+import { DEFAULT_MAX_PAIR_LOOPS, MAX_PAIR_LOOPS_LIMIT, straightAntiRollEnabled, straightAntiRollMeta } from './straightRolling.js';
 
 export { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
 
@@ -157,13 +157,14 @@ export function runAdvancePlan({
   sections=DEFAULT_ALIGNMENT_SECTIONS, verticalAlignment=DEFAULT_VERTICAL_ALIGNMENT,
   startKey='U4', startHLead=-20, startVLead=-10, maxTolerance=55, startRingNumber=1,
   strategy='senior_ai', steeringSign='steering_bias', gapSettings=DEFAULT_GAP_SETTINGS,
-  ringLogs=[], startSTA=null, recovery={},
+  ringLogs=[], startSTA=null, recovery={}, maxPairLoops=DEFAULT_MAX_PAIR_LOOPS,
 }) {
   const config={...DEFAULT_RECOVERY,...recovery};
   const gConfig=normalizeGapSettings(gapSettings);
   const errors=[...validatePlanningInput({startKey,startHLead,startVLead,maxTolerance}),
     ...validateAlignment(sections,verticalAlignment),...validateGapSettings(gConfig),...validateRecovery(config)];
   if(!Number.isSafeInteger(Number(startRingNumber)) || Number(startRingNumber)<1) errors.push('หมายเลขริงเริ่มต้นต้องเป็นจำนวนเต็มมากกว่า 0');
+  if(!Number.isInteger(Number(maxPairLoops)) || Number(maxPairLoops)<1 || Number(maxPairLoops)>MAX_PAIR_LOOPS_LIMIT) errors.push(`ลูปคู่เดิมสูงสุดต้องเป็นจำนวนเต็ม 1–${MAX_PAIR_LOOPS_LIMIT}`);
   if(!['senior_ai','ratio_guided'].includes(strategy)) errors.push('วิธีเลือกคีย์ไม่ถูกต้อง');
   if(startSTA!==null && startSTA!=='' && !/^(\d+\+\d+(\.\d+)?|\d+(\.\d+)?)$/.test(String(startSTA))) errors.push('STA ปัจจุบันไม่ถูกต้อง');
   if(errors.length) throw new Error(errors.join(' · '));
@@ -188,7 +189,7 @@ export function runAdvancePlan({
     const data=KEY_DATA[key], size=SEGMENT_SIZES[data.type], sizeM=size/1000;
     const sec=route.at(state.distance).section;
     const antiRollEnabled=straightAntiRollEnabled(sec.sectionType==='tangent'||sec.direction==='straight'?'straight':sec.direction,sec.allowedTypes||['U','R','L']);
-    const rolling=antiRollEnabled?straightAntiRollMeta(state.key,key,state.recentKeys):null;
+    const rolling=antiRollEnabled?straightAntiRollMeta(state.key,key,state.recentKeys,maxPairLoops):null;
     const turnH=-data.hLead/responseDiameter,turnV=-data.vLead/responseDiameter;
     const projected=propagateRecovery(state,route,sizeM,turnH,turnV);
     const leadReq=responseDiameter*(projected.dtaTheta-state.dtaTheta);
@@ -240,13 +241,18 @@ export function runAdvancePlan({
       leadReq:rounded(leadReq,2),vLeadReq:rounded(vLeadReq,2),afterH,afterV,suitability,...gaps,minGap,
       exceedsLimit:overLimitAmount>0,overLimitAmount:rounded(overLimitAmount,2),isGapWarn:minGap<=gConfig.warnThreshold,
       isGapCrit:minGap<=gConfig.criticalThreshold,articulationDeg:rounded(articulationDeg),taperTurnDeg:rounded(articulationDeg),articulationExceeded:articulationDeg>Number(config.maxTaperTurnDeg),
-      target,cost,totalScore:rounded(-cost,2),rolling,rollingCost,projected:{...projected,key,h:afterH,v:afterV,used:nextUsed,recentKeys:[...state.recentKeys,key].slice(-18)}};
+      target,cost,totalScore:rounded(-cost,2),rolling,rollingCost,projected:{...projected,key,h:afterH,v:afterV,used:nextUsed,recentKeys:[...state.recentKeys,key].slice(-24)}};
   };
-  const candidates=state=>(NEXT_RING_TABLE[state.key]||[]).filter(key=>{
+  const candidates=state=>{
+    const available=(NEXT_RING_TABLE[state.key]||[]).filter(key=>{
     const type=KEY_DATA[key].type,start=route.startOffset+state.distance;
     const end=Math.min(route.startOffset+route.totalDistance,start+SEGMENT_SIZES[type]/1000);
     return route.spans.filter(span=>span.end>start+1e-7 && span.start<end-1e-7).every(span=>(span.section.allowedTypes||['U','R','L']).includes(type));
-  });
+    });
+    const sec=route.at(state.distance).section;
+    const antiRollEnabled=straightAntiRollEnabled(sec.sectionType==='tangent'||sec.direction==='straight'?'straight':sec.direction,sec.allowedTypes||['U','R','L']);
+    return antiRollEnabled?available.filter(key=>!straightAntiRollMeta(state.key,key,state.recentKeys,maxPairLoops).loopLimitExceeded):available;
+  };
   const select=state=>{
     const nearEndpoint=route.totalDistance-state.distance<=8.4;
     const width=nearEndpoint?24:6,depthLimit=nearEndpoint?7:3;
@@ -277,7 +283,8 @@ export function runAdvancePlan({
     const {projected:ignoredProjected,target:ignoredTarget,...fields}=chosen;
     void ignoredProjected;void ignoredTarget;
     const doublesType=chosen.rolling&&KEY_DATA[current.key]?.type===chosen.type;
-    const antiRollReason=chosen.rolling?`${doublesType?`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อแก้ Lead/แนว`:'สลับ RT/LT'} · Anti-Roll เปลี่ยนตำแหน่งคีย์ · `:'';
+    const loopReason=chosen.rolling?.changedPairAfterLimit?`ครบ ${chosen.rolling.maxPairLoops} ลูปแล้ว เปลี่ยนคู่คีย์`:chosen.rolling?.repeatsPair?`ลูปคู่เดิม ${chosen.rolling.pairLoopCount}/${chosen.rolling.maxPairLoops}`:'Anti-Roll เปลี่ยนตำแหน่งคีย์';
+    const antiRollReason=chosen.rolling?`${doublesType?`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อแก้ Lead/แนว`:'สลับ RT/LT'} · ${loopReason} · `:'';
     const aiReasoning=`${antiRollReason}${driftTrend==='converging'?'กำลังกลับเข้าแนว':driftTrend==='diverging'?'ยังเยื้องเพิ่ม — ต้องตรวจทาน':'ระยะเยื้องคงที่'} · H/V คาดการณ์ ${rounded(next.deviationH,1)}/${rounded(next.deviationV,1)} mm · มุมคลาด H/V ${rounded(degrees(next.headingError),3)}/${rounded(degrees(next.pitchError),3)}° · เหลือ ${rounded(remaining,1)} m`;
     const ring={...fields,recordType:'planned',initialStateConfirmed:config.initialStateConfirmed===true,initialPoseSTA:formatSTA(route.staAt(0)),step,ringNum,ringNumInt,sta:formatSTA(route.staAt(current.distance)),
       endSTA:formatSTA(route.staAt(next.distance)),dist:rounded(current.distance,3),sectionCode:sec.code,sectionName:sec.name,sectionType:sec.sectionType,
@@ -311,7 +318,7 @@ export function runAdvancePlan({
   });
   const counts={un:plannedRings.filter(r=>r.type==='U').length,rt:plannedRings.filter(r=>r.type==='R').length,lt:plannedRings.filter(r=>r.type==='L').length};
   const last=plannedRings.at(-1);
-  return {summary,endpoint,ratioDiagnostics,sections,totalRings:plannedRings.length,maxTolerance:limit,counts,plannedRings,violations,gapAlerts,
+  return {summary,endpoint,ratioDiagnostics,sections,totalRings:plannedRings.length,maxTolerance:limit,maxPairLoops:Number(maxPairLoops),counts,plannedRings,violations,gapAlerts,
     maxObservedLead:rounded(Math.max(...plannedRings.map(r=>Math.max(Math.abs(r.afterH),Math.abs(r.afterV)))),2),
     maxDeviationMm:rounded(Math.max(...plannedRings.map(r=>Math.abs(r.deviationMm))),1),
     maxVerticalDeviationMm:rounded(Math.max(...plannedRings.map(r=>Math.abs(r.deviationVMm))),1),

@@ -81,6 +81,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const [currentSTA, setCurrentSTA] = useState(savedSession.currentSTA ?? (sections[0]?.startSTA || ''));
   const [recovery, setRecovery] = useState(savedSession.recovery ? {...DEFAULT_RECOVERY,...savedSession.recovery} : {...DEFAULT_RECOVERY});
   const [maxTolerance, setMaxTolerance] = useState(savedSession.maxTolerance ?? 55.0);
+  const [maxPairLoops, setMaxPairLoops] = useState(savedSession.maxPairLoops ?? 3);
   const [steeringSign, setSteeringSign] = useState(savedSession.steeringSign || 'steering_bias'); // 'steering_bias' (Right = -)
   const [activeSubTab, setActiveSubTab] = useState('2d_map'); // '2d_map' | 'trajectory_chart' | 'table'
 
@@ -101,13 +102,13 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
 
   useEffect(() => {
     try { setProjectItem(`tbm_advance_session_${track}`, JSON.stringify({ ...savedSession, sections, vProfile, strategy,
-      startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign })); }
+      startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, maxPairLoops, steeringSign })); }
     catch (error) { console.error('Cannot save track planning session', error); }
-  }, [track, savedSession, sections, vProfile, strategy, startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, steeringSign]);
+  }, [track, savedSession, sections, vProfile, strategy, startKey, startHLead, startVLead, currentSTA, recovery, maxTolerance, maxPairLoops, steeringSign]);
   // Plan Calculation State (Safe initialization)
   const [planResult, setPlanResult] = useState(() => {
     try {
-      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ ringNum: nextRingNumber(trackRingLogs) }) });
+      return runAdvancePlan({ sections, verticalAlignment: vProfile, startKey, startHLead, startVLead, maxTolerance, maxPairLoops, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ ringNum: nextRingNumber(trackRingLogs) }) });
     } catch (e) {
       console.error('Initial plan error:', e);
       return {
@@ -128,7 +129,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     const errors = [...validatePlanningInput({ startKey, startHLead, startVLead, maxTolerance }), ...validateAlignment(sections, vProfile)];
     if (errors.length) { setInputErrors(errors); setNeedsRecalc(true); return; }
     try {
-      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ringNum:nextRingNumber(trackRingLogs)}) });
+      const res = runAdvancePlan({ sections, verticalAlignment:vProfile, startKey, startHLead, startVLead, maxTolerance, maxPairLoops, steeringSign, strategy, gapSettings, ringLogs:trackRingLogs, startSTA:currentSTA, recovery, startRingNumber: ringNumber({ringNum:nextRingNumber(trackRingLogs)}) });
       setPlanResult(res); setIsCalculated(true); setNeedsRecalc(false); setScrubStep(1); setInputErrors([]);
     } catch (error) { setInputErrors([error.message]); setNeedsRecalc(true); }
   };
@@ -346,6 +347,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
     startHLead={startHLead} changeStartHLead={value=>{setStartHLead(value);markDirty();}}
     startVLead={startVLead} changeStartVLead={value=>{setStartVLead(value);markDirty();}}
     maxTolerance={maxTolerance} changeMaxTolerance={value=>{setMaxTolerance(value);markDirty();}}
+    maxPairLoops={maxPairLoops} changeMaxPairLoops={value=>{setMaxPairLoops(value);markDirty();}}
     steeringSign={steeringSign} changeSteeringSign={value=>{setSteeringSign(value);markDirty();}}
     planResult={planResult} summary={summary} sections={sections} resultFilter={resultFilter} setResultFilter={setResultFilter} tableRings={tableRings}
     scrubStep={scrubStep} setScrubStep={setScrubStep} selectedRing={selectedRing}
@@ -420,6 +422,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
         <Field label="H Lead เริ่มต้น (mm)"><input type="number" step="0.1" value={startHLead} onChange={e=>{setStartHLead(e.target.value);markDirty();}}/></Field>
         <Field label="V Lead เริ่มต้น (mm)"><input type="number" step="0.1" value={startVLead} onChange={e=>{setStartVLead(e.target.value);markDirty();}}/></Field>
         <Field label="Lead Limit ± (mm)"><input type="number" value={maxTolerance} onChange={e=>{setMaxTolerance(e.target.value);markDirty();}}/></Field>
+        <Field label="ลูปคู่เดิมสูงสุด (รอบ)"><input type="number" min="1" max="10" step="1" value={maxPairLoops} onChange={e=>{setMaxPairLoops(e.target.value);markDirty();}}/></Field>
         <Field label="เป้าหมายการเลี้ยว"><select value={steeringSign} onChange={e=>{setSteeringSign(e.target.value);markDirty();}}><option value="steering_bias">เป้าหมายตรงข้าม Lead โค้ง</option><option value="standard_positive">เป้าหมายตาม Lead โค้ง</option></select></Field>
         <div className="page-actions"><button className="btn btn-outline" onClick={handleResetSections}><RotateCcw size={16}/>ใช้ช่วงตาม Drawing</button></div>
       </div>
