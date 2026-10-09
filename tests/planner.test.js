@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { KEY_DATA, NEXT_RING_TABLE, INITIAL_RING_LOGS } from '../src/data/tbmConstants.js';
-import { predictGaps, assessRing, summarizeRings, validateAlignment, recordKind, finite, buildCSV } from '../src/services/decisionSupport.js';
+import { predictGaps, assessRing, summarizeRings, validateAlignment, recordKind, finite, round, buildCSV } from '../src/services/decisionSupport.js';
 import { evaluateCandidates } from '../src/services/smartCandidates.js';
 import { runAutoPlan } from '../src/services/autoPlanner.js';
 import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../src/services/advancePlanner.js';
@@ -11,6 +11,7 @@ import { recordRow, parseRecordRows } from '../src/services/googleSheetsService.
 import { DEFAULT_RECOVERY, recoveryTarget, createRoute, initialRecoveryState, propagateRecovery, endpointAssessment, radians } from '../src/services/alignmentRecovery.js';
 import { buildSequenceVisualPlan } from '../src/services/sequenceVisual.js';
 import { STRAIGHT_ANTI_ROLL_CYCLE, straightAntiRollMeta, validateStraightAntiRollCycle } from '../src/services/straightRolling.js';
+import { recommendSoilConditioning } from '../src/services/soilConditioningAdvisor.js';
 
 const normal = {hLead:0,vLead:0,gapT:50,gapB:50,gapL:50,gapR:50,suitability:'Yes'};
 const section = { ...DEFAULT_ALIGNMENT_SECTIONS[0], code:'TEST', startSTA:'00+000.000', endSTA:'00+015.000', ratio:{un:1,rt:1,lt:1}, allowedTypes:['U','R','L'] };
@@ -292,6 +293,24 @@ test('conditioning validates zero divisors and conserves concentration/material 
  const one=calculatePolymerConsumption({distance:1}),ten=calculatePolymerConsumption({distance:10});
  assert.ok(Math.abs(one.totalConsumptionL*10-ten.totalConsumptionL)<.1);
  assert.throws(()=>calculatePolymerConsumption({polymerDosage:-1}));
+});
+
+test('soil conditioning adviser reacts to soil evidence and reports confidence',()=>{
+ const incomplete=recommendSoilConditioning({soilType:'silty_clay',dataQuality:'estimate'});
+ assert.equal(incomplete.confidence,'low');
+ assert.ok(incomplete.missing.includes('ความชื้นธรรมชาติ'));
+ const sand=recommendSoilConditioning({soilType:'sand',finesContent:8,waterContent:12,plasticityIndex:0,permeability:'high',groundwater:'high',muckCondition:'dry',torqueTrend:'high',dataQuality:'lab'});
+ assert.equal(sand.confidence,'high');
+ assert.ok(sand.fir.target>incomplete.fir.target);
+ assert.equal(sand.polymerSuggested,true);
+ assert.ok(sand.fir.min<=sand.fir.target&&sand.fir.target<=sand.fir.max);
+ assert.ok(sand.fer.min<=sand.fer.target&&sand.fer.target<=sand.fer.max);
+ assert.equal(sand.liquidInjectionRatio,round(sand.fir.target/sand.fer.target,1));
+ const wet=recommendSoilConditioning({soilType:'sand',finesContent:40,waterContent:35,plasticityIndex:0,permeability:'medium',groundwater:'medium',muckCondition:'wet',dataQuality:'lab'});
+ assert.ok(wet.fir.target<sand.fir.target);
+ const invalid=recommendSoilConditioning({soilType:'sand',finesContent:120,waterContent:-1,plasticityIndex:0,permeability:'medium',groundwater:'medium',dataQuality:'lab'});
+ assert.equal(invalid.confidence,'medium');
+ assert.ok(invalid.missing.includes('เม็ดละเอียด <0.075 mm'));
 });
 
 
