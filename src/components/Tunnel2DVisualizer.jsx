@@ -49,6 +49,7 @@ export default function Tunnel2DVisualizer({
   const rings = useMemo(() => planResult?.plannedRings || [], [planResult]);
   const totalRings = rings.length;
   const currentRing = rings[scrubStep - 1] || rings[0] || {};
+  const hasPlanSources = rings.some(ring => ring.planSource);
 
   // Tunnel Diameter / Radius in meters (6.3m diameter -> 3.15m radius)
   const TUNNEL_RADIUS_M = 3.15;
@@ -540,6 +541,7 @@ export default function Tunnel2DVisualizer({
 
         {/* Legend Overlay */}
         <div className="absolute bottom-3 left-3 pointer-events-none z-10 flex flex-wrap items-center gap-3 bg-black/75 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-[10px] font-mono">
+          {hasPlanSources && <><div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-slate-500/40 border border-slate-400"></span><span className="text-slate-300 font-bold">แผนเดิม</span></div><span className="text-slate-500">→</span></>}
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm bg-amber-500/60 border border-amber-400"></span>
             <span className="text-amber-300 font-bold">UN (1.2m)</span>
@@ -684,6 +686,12 @@ export default function Tunnel2DVisualizer({
                     fillColor = 'rgba(6, 182, 212, 0.28)';
                     strokeColor = '#06b6d4';
                     textColor = '#67e8f9';
+                  }
+
+                  if (r.planSource === 'history') {
+                    fillColor = 'rgba(100, 116, 139, 0.24)';
+                    strokeColor = '#94a3b8';
+                    textColor = '#cbd5e1';
                   }
 
                   if (isCurrent) {

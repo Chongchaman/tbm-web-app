@@ -9,6 +9,7 @@ import { calibrateFromRingLogs } from '../src/services/aiCalibrator.js';
 import { calculateFoamConsumption, calculatePolymerConsumption, calculateCurveOffset, calculateCandidates } from '../src/services/calculator.js';
 import { recordRow, parseRecordRows } from '../src/services/googleSheetsService.js';
 import { DEFAULT_RECOVERY, recoveryTarget, createRoute, initialRecoveryState, propagateRecovery, endpointAssessment, radians } from '../src/services/alignmentRecovery.js';
+import { buildSequenceVisualPlan } from '../src/services/sequenceVisual.js';
 
 const normal = {hLead:0,vLead:0,gapT:50,gapB:50,gapL:50,gapR:50,suitability:'Yes'};
 const section = { ...DEFAULT_ALIGNMENT_SECTIONS[0], code:'TEST', startSTA:'00+000.000', endSTA:'00+015.000', ratio:{un:1,rt:1,lt:1}, allowedTypes:['U','R','L'] };
@@ -72,6 +73,21 @@ test('sequence planner is deterministic, preserves transitions, and sums actual 
  assert.throws(()=>runAutoPlan({...input,radius:0}));
  assert.throws(()=>runAutoPlan({...input,lookaheadDepth:'bad'}));
  assert.throws(()=>runAutoPlan({...input,allowedTypes:['X']}));
+});
+
+test('sequence visual joins saved plans to the new plan with continuous curve geometry',()=>{
+ const history=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:3,alignmentType:'right',radius:180}).plannedRings;
+ const current=runAutoPlan({startRingNum:'R0004',startKey:history.at(-1).selectedKey,startHLead:history.at(-1).afterH,startVLead:history.at(-1).afterV,ringCount:2,alignmentType:'left',radius:300}).plannedRings;
+ const visual=buildSequenceVisualPlan({historyPlans:[...history,{...history[0],ringNum:'R0099'}],currentRings:current,alignmentType:'left',radius:300,startRingNum:'R0004'});
+ assert.equal(visual.historyCount,3);assert.equal(visual.currentCount,2);assert.equal(visual.plannedRings.length,5);
+ assert.ok(visual.plannedRings.slice(0,3).every(r=>r.planSource==='history'));
+ assert.ok(visual.plannedRings.slice(3).every(r=>r.planSource==='current'));
+ for(let index=1;index<visual.plannedRings.length;index++) {
+  assert.equal(visual.plannedRings[index].startX,visual.plannedRings[index-1].endX);
+  assert.equal(visual.plannedRings[index].startY,visual.plannedRings[index-1].endY);
+ }
+ const expectedTurn=[...history,...current].reduce((sum,ring)=>sum+ring.leadReq/6300,0)*180/Math.PI;
+ assert.ok(Math.abs(visual.totalTurnDeg-expectedTurn)<.001);
 });
 
 test('integer BOQ allocation conserves quantities without negative segment counts',()=>{
