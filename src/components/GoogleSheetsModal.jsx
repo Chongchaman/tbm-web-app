@@ -67,7 +67,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
   return <div className="dialog-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="dialog sheets-dialog" role="dialog" aria-modal="true" aria-labelledby="sheets-title">
       <div className="sheets-header"><div><span className="eyebrow">PROJECT DATABASE</span><h2 id="sheets-title">Google Sheets · 2 เครื่อง</h2><p>TBM1 / E/B และ TBM2 / W/B แยกข้อมูลริงและแผนคนละชีต</p></div><button className="icon-button" aria-label="ปิด" onClick={onClose}><X size={18}/></button></div>
-      <div className={`sheets-status ${connected ? 'is-connected' : ''}`}>{connected ? <Cloud size={18}/> : <CloudOff size={18}/>}<div><strong>{connected ? 'เชื่อมต่อในครั้งนี้แล้ว' : 'กำลังใช้ข้อมูลในเครื่อง'}</strong><small>{connected ? `รายการรอซิงก์ ${pendingCount()} รายการ` : 'ลงชื่อเข้าใช้ Google เพื่ออ่านและบันทึกชีต'}</small></div></div>
+      <div className={`sheets-status ${connected ? 'is-connected' : ''}`}>{connected ? <Cloud size={18}/> : <CloudOff size={18}/>}<div><strong>{connected ? 'เชื่อมต่อแล้ว · รีเฟรชหน้าได้' : 'กำลังใช้ข้อมูลในเครื่อง'}</strong><small>{connected ? `จำการเชื่อมต่อไว้ในแท็บนี้จนกว่า Google token หมดอายุ · รอซิงก์ ${pendingCount()} รายการ` : 'ลงชื่อเข้าใช้ Google เพื่ออ่านและบันทึกชีต'}</small></div></div>
       <div className="sheets-fields">
         <label>TBM1 · E/B Google Sheet<input value={config.sheetIdEB} onChange={event => setConfig(previous => ({ ...previous, sheetIdEB: event.target.value }))} disabled={working || connected} /></label>
         <label>TBM2 · W/B Google Sheet<input value={config.sheetIdWB} onChange={event => setConfig(previous => ({ ...previous, sheetIdWB: event.target.value }))} disabled={working || connected} /></label>
@@ -84,7 +84,7 @@ export default function GoogleSheetsModal({ onClose, onConnectionChange, ringLog
           <button className="btn btn-outline" disabled={working} onClick={() => { disconnectSheets(); setConnected(false); onConnectionChange(false); setMessage('ออกจากการเชื่อมต่อแล้ว'); }}>ตัดการเชื่อมต่อ</button>
         </>}
       </div>
-      <p className="sheets-footnote">การเพิ่ม แก้ไข และลบจากเว็บจะส่งเข้า Google Sheet ทันที พร้อมอัปเดตแท็บเว็บอื่นทันที ระบบตรวจการเปลี่ยนจากชีตหรืออุปกรณ์อื่นทุกประมาณ 3 วินาที และการลบจากเว็บจะลบแถวจริงในแท็บ Records</p>
+      <p className="sheets-footnote">การเพิ่ม แก้ไข และลบจากเว็บจะส่งเข้า Google Sheet ทันที พร้อมอัปเดตแท็บเว็บอื่นทันที ระบบตรวจการเปลี่ยนจากชีตหรืออุปกรณ์อื่นทุกประมาณ 3 วินาที และการลบจากเว็บจะลบแถวจริงในแท็บ Records · Google อาจให้เชื่อมใหม่เมื่อ token หมดอายุหรือเปิดเบราว์เซอร์รอบใหม่ แต่จะไม่บังคับหน้าขออนุญาตซ้ำถ้าเคยอนุญาตแล้ว</p>
     </section>
   </div>;
 }

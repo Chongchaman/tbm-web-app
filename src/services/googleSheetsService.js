@@ -5,6 +5,7 @@ const CONFIG_KEY = 'tbm_google_sheets_config';
 const PENDING_KEY = 'tbm_google_sheets_pending';
 const PENDING_STATE_KEY = 'tbm_google_sheets_pending_state';
 const MIGRATED_KEY = 'tbm_google_sheets_migrated';
+const SESSION_TOKEN_KEY = 'tbm_google_sheets_session_token';
 // Public OAuth Web Client ID. The browser token flow does not use a client secret.
 const DEFAULT_CLIENT_ID = '241587010481-t2ect3k7r78da75c3irnr8cdthc2pj41.apps.googleusercontent.com';
 const DEFAULT_SHEETS = {
@@ -54,8 +55,30 @@ export function saveSheetsConfig(config) {
   if (!sheetIdEB || !sheetIdWB) throw new Error('กรุณาใส่ลิงก์หรือ ID ของทั้งสอง Google Sheet');
   if (sheetIdEB === sheetIdWB) throw new Error('TBM1 และ TBM2 ต้องใช้ Google Sheet คนละไฟล์');
   localStorage.setItem(CONFIG_KEY, JSON.stringify({ clientId, sheetIdEB, sheetIdWB }));
-  accessToken = '';
+  forgetSessionToken();
   return { clientId, sheetIdEB, sheetIdWB };
+}
+
+function forgetSessionToken() {
+  accessToken = '';
+  try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch { /* storage can be unavailable */ }
+}
+
+function rememberSessionToken(response) {
+  accessToken = response.access_token;
+  const lifetimeMs = Math.max(0, Number(response.expires_in || 3600) * 1000 - 60_000);
+  try { sessionStorage.setItem(SESSION_TOKEN_KEY, JSON.stringify({ accessToken, expiresAt: Date.now() + lifetimeMs })); }
+  catch { /* the in-memory token remains usable */ }
+}
+
+function restoreSessionToken() {
+  if (accessToken) return accessToken;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SESSION_TOKEN_KEY) || 'null');
+    if (saved?.accessToken && Number(saved.expiresAt) > Date.now()) accessToken = saved.accessToken;
+    else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  } catch { /* require reconnect when cached data is unavailable */ }
+  return accessToken;
 }
 
 export function parseSheetId(input) {
@@ -64,7 +87,7 @@ export function parseSheetId(input) {
   return match ? match[1] : (/^[\w-]{20,}$/.test(value) ? value : '');
 }
 
-export function isSheetsConnected() { return Boolean(accessToken); }
+export function isSheetsConnected() { return Boolean(restoreSessionToken()); }
 
 function loadGIS() {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -82,29 +105,30 @@ function loadGIS() {
 export async function connectSheets(config = getSheetsConfig()) {
   if (!config.clientId || !config.sheetIdEB || !config.sheetIdWB) throw new Error('กรุณาตั้งค่า OAuth Client ID และ Google Sheet ทั้งสองก่อน');
   await loadGIS();
-  const token = await new Promise((resolve, reject) => {
+  const tokenResponse = await new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: config.clientId,
       scope: SCOPE,
-      callback: response => response.error ? reject(new Error(response.error_description || response.error)) : resolve(response.access_token),
+      callback: response => response.error ? reject(new Error(response.error_description || response.error)) : resolve(response),
       error_callback: response => reject(new Error(response.type === 'popup_closed' ? 'ปิดหน้าต่างลงชื่อเข้าใช้' : 'Google Sign-In ไม่สำเร็จ')),
     });
-    client.requestAccessToken({ prompt: 'consent' });
+    // Empty prompt still asks on first consent, but avoids forcing consent/account choice again.
+    client.requestAccessToken({ prompt: '' });
   });
-  accessToken = token;
+  rememberSessionToken(tokenResponse);
   try { await Promise.all([config.sheetIdEB, config.sheetIdWB].map(id => sheetsRequest('GET', `/${encodeURIComponent(id)}?fields=properties.title,sheets.properties.title`))); }
-  catch (error) { accessToken = ''; throw error; }
+  catch (error) { forgetSessionToken(); throw error; }
   return true;
 }
 
 export function disconnectSheets() {
-  const token = accessToken;
-  accessToken = '';
+  const token = restoreSessionToken();
+  forgetSessionToken();
   if (token && window.google?.accounts?.oauth2?.revoke) window.google.accounts.oauth2.revoke(token, () => {});
 }
 
 async function sheetsRequest(method, path, body) {
-  if (!accessToken) throw new Error('กรุณาลงชื่อเข้าใช้ Google ก่อน');
+  if (!restoreSessionToken()) throw new Error('กรุณาลงชื่อเข้าใช้ Google ก่อน');
   let response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -115,7 +139,7 @@ async function sheetsRequest(method, path, body) {
   } catch { throw new Error('ติดต่อ Google Sheets ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่'); }
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
-    if (response.status === 401) accessToken = '';
+    if (response.status === 401) forgetSessionToken();
     throw new Error(result.error?.message || `Google Sheets ตอบกลับ ${response.status}`);
   }
   return response.json().catch(() => ({}));
