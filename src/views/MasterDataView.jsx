@@ -1,4 +1,4 @@
-import { setProjectItem } from '../services/googleSheetsService';
+import { setProjectItem } from '../services/cloudDatabaseService';
 import { PageHeader, Field, InsightPanel, ValidationErrors } from '../components/PlannerUI';
 import { validateAlignment, validateGapSettings } from '../services/decisionSupport';
 import { useState, useMemo } from 'react';

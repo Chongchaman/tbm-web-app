@@ -5,7 +5,7 @@ import SoilProfilePanel from '../components/SoilProfilePanel';
 import { DEFAULT_ALIGNMENT_SECTIONS } from '../services/advancePlanner';
 import { readStored } from '../services/decisionSupport';
 import { clampSoilStation, formatSTA, SOIL_LIMITS } from '../services/soilProfile';
-import { setProjectItem } from '../services/googleSheetsService';
+import { setProjectItem } from '../services/cloudDatabaseService';
 
 const savedStation = track => {
   const session=readStored(`tbm_advance_session_${track}`,{})||{};

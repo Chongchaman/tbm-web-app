@@ -27,5 +27,8 @@ dist-ssr
 *.sw?
 
 .vercel
+.wrangler
+.dev.vars
+.migration
 .env*
 !.env.example

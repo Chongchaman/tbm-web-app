@@ -1,4 +1,4 @@
-import { setProjectItem } from '../services/googleSheetsService';
+import { setProjectItem } from '../services/cloudDatabaseService';
 import { useEffect, useState } from 'react';
 import { Save, RotateCcw } from 'lucide-react';
 import { PageHeader, Field, InsightPanel, StatusBadge, ValidationErrors, EmptyState } from '../components/PlannerUI';

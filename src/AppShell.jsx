@@ -11,11 +11,11 @@ const ConsumablesView = lazy(() => import('./views/ConsumablesView'));
 const MasterDataView = lazy(() => import('./views/MasterDataView'));
 const GuideView = lazy(() => import('./views/GuideView'));
 import ErrorBoundary from './components/ErrorBoundary';
-import GoogleSheetsModal from './components/GoogleSheetsModal';
+import CloudDatabaseModal from './components/CloudDatabaseModal';
 import AppearanceSettings from './components/AppearanceSettings';
 import { normalizeAppearance, appearanceTokens } from './services/appearance';
 import { INITIAL_RING_LOGS } from './data/tbmConstants';
-import { fetchSheetSnapshot, flushPendingProjectState, flushPendingRecords, isSheetsConnected, pendingCount, queueRecordChanges, setProjectItem, subscribeRecordChanges } from './services/googleSheetsService';
+import { fetchCloudSnapshot, flushPendingProjectState, flushPendingRecords, isCloudConnected, isCloudMigrated, markCloudMigrated, pendingCount, queueRecordChanges, restoreProjectState, setProjectItem, subscribeRecordChanges } from './services/cloudDatabaseService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
 import { tbmMode } from './services/tbmMode';
@@ -42,7 +42,7 @@ export default function AppShell() {
   const [sidebarOpen,setSidebarOpen] = useState(false);
   const [cloudModal,setCloudModal] = useState(false);
   const [preferences,setPreferences] = useState(false);
-  const [connected,setConnected] = useState(isSheetsConnected);
+  const [connected,setConnected] = useState(isCloudConnected);
   const [cloudState,setCloudState] = useState('local');
   const [notice,setNotice] = useState(null);
   const [historyFilter,setHistoryFilter] = useState('all');
@@ -124,15 +124,26 @@ export default function AppShell() {
   },[ringLogs,plans]);
 
   useEffect(()=>{
-    if(!connected || localStorage.getItem('tbm_google_sheets_migrated')!=='1') return undefined;
+    if(!connected) return undefined;
     let active=true;
     const syncNow=async()=>{
       if(!active || busy.current || syncing.current) return;
       syncing.current=true;
       try {
         await Promise.all([flushPendingRecords(),flushPendingProjectState()]);
-        const snapshot=await fetchSheetSnapshot();
+        const snapshot=await fetchCloudSnapshot();
         if(!active) return;
+        if(!snapshot.initialized) {setCloudState('empty');return;}
+        if(!isCloudMigrated()) {
+          localStorage.setItem('tbm_cloud_before_auto_records',JSON.stringify({savedAt:new Date().toISOString(),ringLogs:logsRef.current,plans:plansRef.current}));
+          localStorage.setItem('tbm_ring_logs',JSON.stringify(snapshot.records.filter(record=>recordKind(record)!=='planned')));
+          localStorage.setItem('tbm_saved_plans',JSON.stringify(snapshot.records.filter(record=>recordKind(record)==='planned')));
+          restoreProjectState(snapshot.state);
+          window.location.reload();
+          return;
+        }
+        markCloudMigrated();
+        if(snapshot.changed===false) {setCloudState('live');return;}
         const nextLogs=sortRings(snapshot.records.filter(record=>recordKind(record)!=='planned').map(canonical));
         const nextPlans=sortRings(snapshot.records.filter(record=>recordKind(record)==='planned').map(canonical));
         const same=(left,right)=>left.length===right.length&&left.every((record,index)=>identity(record)===identity(right[index])&&JSON.stringify(record)===JSON.stringify(right[index]));
@@ -172,10 +183,10 @@ export default function AppShell() {
       if(fieldRecords.length) setRingLogs(prev=>sortRings([...prev.filter(old=>!fieldRecords.some(next=>next.track===old.track&&ringNumber(next)===ringNumber(old))),...fieldRecords]));
       if(existing && recordKind(existing)==='planned' && fieldRecords.length) setPlans(prev=>prev.filter(r=>identity(r)!==identity(existing)));
       if(existing && recordKind(existing)!=='planned' && nextPlans.length) setRingLogs(prev=>prev.filter(r=>identity(r)!==identity(existing)));
-      if(connected && localStorage.getItem('tbm_google_sheets_migrated')==='1') {
-        try { await flushPendingRecords(); setCloudState('live'); setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องและ Google Sheet แล้ว`}); }
-        catch(error) {setCloudState('error');setNotice({level:'warning',text:`บันทึกในเครื่องแล้ว · รอส่งไป Google Sheet (${error.message})`});}
-      } else setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Google Sheet`});
+      if(connected) {
+        try { await flushPendingRecords(); markCloudMigrated(); setCloudState('live'); setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องและ Cloudflare D1 แล้ว`}); }
+        catch(error) {setCloudState('error');setNotice({level:'warning',text:`บันทึกในเครื่องแล้ว · รอส่งไป Cloudflare (${error.message})`});}
+      } else setNotice({level:'normal',text:`บันทึก ${normalized.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Cloudflare`});
     } catch(error) {setNotice({level:'critical',text:error.message});throw error;} finally {busy.current=false;}
   }
   async function removeRecords(records) {
@@ -185,10 +196,10 @@ export default function AppShell() {
       queueRecordChanges(records,'delete');
       const ids=new Set(records.map(identity));
       setRingLogs(prev=>prev.filter(r=>!ids.has(identity(r)))); setPlans(prev=>prev.filter(r=>!ids.has(identity(r))));
-      if(connected && localStorage.getItem('tbm_google_sheets_migrated')==='1') {
-        try { await flushPendingRecords(); setCloudState('live'); setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องและ Google Sheet แล้ว`}); }
-        catch(error) {setCloudState('error');setNotice({level:'warning',text:`ลบในเครื่องแล้ว · รอส่งไป Google Sheet (${error.message})`});}
-      } else setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Google Sheet`});
+      if(connected) {
+        try { await flushPendingRecords(); markCloudMigrated(); setCloudState('live'); setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องและ Cloudflare D1 แล้ว`}); }
+        catch(error) {setCloudState('error');setNotice({level:'warning',text:`ลบในเครื่องแล้ว · รอส่งไป Cloudflare (${error.message})`});}
+      } else setNotice({level:'normal',text:`ลบ ${records.length} รายการในเครื่องแล้ว · รอเชื่อมต่อ Cloudflare`});
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
@@ -206,7 +217,7 @@ export default function AppShell() {
   const activePlans=plans.filter(r=>r.track===advanceTrack);
   return <ErrorBoundary><a className="skip-link" href="#main-content">ข้ามไปเนื้อหา</a><div className="app-shell">
     {sidebarOpen && <button className="sidebar-overlay" aria-label="ปิดเมนู" onClick={()=>setSidebarOpen(false)} />}
-    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.filter(r=>r.track===advanceTrack).length+activePlans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>Google Sheets<small style={{display:'block'}}>{!connected?`ข้อมูลในเครื่อง · รอส่ง ${pendingCount()}`:cloudState==='error'?`เชื่อมต่อมีปัญหา · รอส่ง ${pendingCount()}`:`เชื่อมต่อแล้ว · รอส่ง ${pendingCount()}`}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
+    <aside className={`app-sidebar ${sidebarOpen?'is-open':''}`}><div className="brand"><div className="brand-icon"><BrandIcon size={24}/></div><div><strong>{appearance.appName}</strong><small>{appearance.projectName}</small><small>{appearance.projectDetail}</small></div></div><nav aria-label="เมนูหลัก">{menus.map(({id,label,icon:Icon,group})=><div key={id}>{group && <span className="nav-group">{group}</span>}<button className={`nav-item ${activeTab===id?'active':''}`} aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={19}/><span>{label}</span>{id==='history' && <small>{ringLogs.filter(r=>r.track===advanceTrack).length+activePlans.length}</small>}</button></div>)}</nav><div className="sidebar-footer"><button className="nav-item" onClick={()=>{setSidebarOpen(false);setPreferences(true);}}><Settings2 size={19}/><span>ตั้งค่าโครงการและหน้าตา</span></button><button className="nav-item" onClick={()=>setCloudModal(true)}><Cloud size={19}/><span>Cloudflare D1<small style={{display:'block'}}>{!connected?`ข้อมูลในเครื่อง · รอส่ง ${pendingCount()}`:cloudState==='error'?`เชื่อมต่อมีปัญหา · รอส่ง ${pendingCount()}`:cloudState==='empty'?'ฐานข้อมูลว่าง · พร้อมย้ายข้อมูล':`เชื่อมต่อแล้ว · รอส่ง ${pendingCount()}`}</small></span></button><button className="nav-item" onClick={backup}><Download size={19}/><span>สำรองข้อมูล</span></button></div></aside>
     <div className="app-main"><header className="app-topbar"><div className="topbar-title"><button className="icon-button mobile-menu" aria-label="เปิดเมนู" aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(!sidebarOpen)}><Menu size={20}/></button><span>{active.label}</span><span className="source-label topbar-project" title={appearance.projectName}>/ {appearance.projectName}</span></div><div className="topbar-actions">{activeTab!=='guide'&&<div className="topbar-tbm-switch" role="group" aria-label="เลือกเครื่องเจาะ">{['EB','WB'].map(value=><button key={value} aria-pressed={advanceTrack===value} onClick={()=>changeAdvanceTrack(value)}>{tbmMode(value).machine}<small>{value}</small></button>)}</div>}<button className="icon-button" aria-label={theme==='light'?'ใช้ธีมมืด':'ใช้ธีมสว่าง'} onClick={()=>setAppearance(previous=>({...previous,theme:theme==='light'?'dark':'light'}))}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button className="icon-button" aria-label="ตั้งค่าโครงการและหน้าตา" title="ตั้งค่าโครงการและหน้าตา" onClick={()=>setPreferences(true)}><Settings2 size={18}/></button>{import.meta.env.PROD&&<button className="icon-button" aria-label="ออกจากระบบ" title="ออกจากระบบ" onClick={logout}><LogOut size={18}/></button>}</div></header>
     <main className="app-content" id="main-content">
       {!['guide','advanceplanner'].includes(activeTab) && <div className="machine-context"><div><strong>{advanceTrack==='EB'?'TBM1 · E/B · หัวนำ':'TBM2 · W/B · หัวตาม'}</strong><span>แผนที่บันทึก {activePlans.length} ริง · ข้อมูลและแนวของเครื่องนี้</span></div><div className="machine-progress"><span>TBM1 · {plans.filter(r=>r.track==='EB').length} แผน · {leadRing?.ringNum||'ยังไม่มีค่าจริง'}</span><span>TBM2 · {plans.filter(r=>r.track==='WB').length} แผน · {followRing?.ringNum||'ยังไม่มีค่าจริง'}</span>{leadRing&&followRing&&<b>ต่างกัน {Math.abs(ringNumber(leadRing)-ringNumber(followRing))} ริง</b>}</div></div>}
@@ -225,6 +236,6 @@ export default function AppShell() {
       </Suspense>
     </main></div></div>
     {preferences && <AppearanceSettings settings={appearance} onSave={saveAppearance} onClose={()=>setPreferences(false)} />}
-    {cloudModal && <GoogleSheetsModal onClose={()=>setCloudModal(false)} ringLogs={ringLogs} plans={plans} onConnectionChange={value=>{setConnected(value);setCloudState(value?'live':'local');setNotice(null);}}/>}
+    {cloudModal && <CloudDatabaseModal onClose={()=>setCloudModal(false)} ringLogs={ringLogs} plans={plans} onConnectionChange={value=>{setConnected(value);setCloudState(value?'live':'local');setNotice(null);}}/>}
   </ErrorBoundary>;
 }
