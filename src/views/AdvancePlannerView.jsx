@@ -12,7 +12,7 @@ import KeySuitabilityBadge from '../components/KeySuitabilityBadge';
 import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
 import SegmentPlanningWorkspace from '../components/SegmentPlanningWorkspace';
-import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, parseSTA } from '../services/advancePlanner';
+import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, RATIO_PRESETS, runAdvancePlan, computeRatioBreakdown, estimateRingCount, createNewSection, findBestRatioForSection, DEFAULT_GAP_SETTINGS, normalizeGapSettings, parseSTA } from '../services/advancePlanner';
 import { KEY_DATA } from '../data/tbmConstants';
 import { soilAt, soilSheetAt, tunnelElevationAt } from '../services/soilProfile';
 
@@ -65,7 +65,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       const saved = localStorage.getItem('tbm_gap_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return { ...DEFAULT_GAP_SETTINGS, ...parsed };
+        if (parsed && typeof parsed === 'object') return normalizeGapSettings(parsed);
       }
     } catch (e) {
       console.error(e);

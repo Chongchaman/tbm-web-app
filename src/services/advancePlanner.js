@@ -2,6 +2,9 @@ import { validateAlignment, validateGapSettings, validatePlanningInput, summariz
 import { KEY_DATA, NEXT_RING_TABLE, SUITABILITY_MATRIX } from '../data/tbmConstants.js';
 import { getAdaptiveWeights } from './aiCalibrator.js';
 import { DEFAULT_RECOVERY, validateRecovery, createRoute, initialRecoveryState, propagateRecovery, recoveryTarget, endpointAssessment, radians, degrees, rounded } from './alignmentRecovery.js';
+import { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
+
+export { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from './gapSettings.js';
 
 /** Discrete-key planning with a measured initial pose, a smooth return reference,
  * and independent position/direction checks at the exact alignment endpoint.
@@ -9,16 +12,6 @@ import { DEFAULT_RECOVERY, validateRecovery, createRoute, initialRecoveryState, 
  */
 export const SEGMENT_SIZES = { U: 1200, R: 1400, L: 1400 };
 export const TBM_DIAMETER_MM = 6300;
-
-export const DEFAULT_GAP_SETTINGS = {
-  initialGapTop: 50.0,
-  initialGapBottom: 50.0,
-  initialGapLeft: 50.0,
-  initialGapRight: 50.0,
-  warnThreshold: 15.0,
-  criticalThreshold: 5.0,
-  shieldLength: 4.2,
-};
 
 export function parseSTA(staStr) {
   if (typeof staStr === 'number') return staStr;
@@ -166,7 +159,7 @@ export function runAdvancePlan({
   ringLogs=[], startSTA=null, recovery={},
 }) {
   const config={...DEFAULT_RECOVERY,...recovery};
-  const gConfig={...DEFAULT_GAP_SETTINGS,...gapSettings};
+  const gConfig=normalizeGapSettings(gapSettings);
   const errors=[...validatePlanningInput({startKey,startHLead,startVLead,maxTolerance}),
     ...validateAlignment(sections,verticalAlignment),...validateGapSettings(gConfig),...validateRecovery(config)];
   if(!Number.isSafeInteger(Number(startRingNumber)) || Number(startRingNumber)<1) errors.push('หมายเลขริงเริ่มต้นต้องเป็นจำนวนเต็มมากกว่า 0');

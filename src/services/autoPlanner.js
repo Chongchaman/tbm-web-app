@@ -1,5 +1,6 @@
 import { evaluateCandidates } from './smartCandidates.js';
 import { validatePlanningInput, validateGapSettings, summarizeRings, getLimits, round } from './decisionSupport.js';
+import { normalizeGapSettings } from './gapSettings.js';
 
 export function calculateLeadRequest({alignmentType='straight',radius=500,segWidth=1400}) {
   if(alignmentType==='straight' || Number(radius)<=0) return 0;
@@ -7,6 +8,7 @@ export function calculateLeadRequest({alignmentType='straight',radius=500,segWid
 }
 
 export function runAutoPlan({startRingNum='R0016',startKey='L2',startHLead=38.39,startVLead=32.47,alignmentType='straight',radius=500,ringCount=10,targetV=0,leadLimit=55,gapSettings={initialGapTop:50,initialGapBottom:50,initialGapLeft:50,initialGapRight:50,warnThreshold:15,criticalThreshold:5},allowedTypes=['U','R','L'],lookaheadDepth=3}) {
+  gapSettings=normalizeGapSettings(gapSettings);
   const errors=[...validatePlanningInput({startKey,startHLead,startVLead,alignmentType,radius,ringCount,targetV,maxTolerance:leadLimit}),...validateGapSettings(gapSettings)];
   if(!/^R?\d+$/i.test(String(startRingNum)) || Number(String(startRingNum).replace(/^R/i,''))<1) errors.push('หมายเลขริงเริ่มต้นไม่ถูกต้อง');
   if(!Number.isInteger(Number(lookaheadDepth)) || Number(lookaheadDepth)<1 || Number(lookaheadDepth)>3) errors.push('จำนวนริงมองล่วงหน้าต้องเป็น 1–3');

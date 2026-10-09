@@ -4,7 +4,7 @@ import { KEY_DATA, NEXT_RING_TABLE, INITIAL_RING_LOGS } from '../src/data/tbmCon
 import { predictGaps, assessRing, summarizeRings, validateAlignment, recordKind, finite, buildCSV } from '../src/services/decisionSupport.js';
 import { evaluateCandidates } from '../src/services/smartCandidates.js';
 import { runAutoPlan } from '../src/services/autoPlanner.js';
-import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, DEFAULT_GAP_SETTINGS } from '../src/services/advancePlanner.js';
+import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../src/services/advancePlanner.js';
 import { calibrateFromRingLogs } from '../src/services/aiCalibrator.js';
 import { calculateFoamConsumption, calculatePolymerConsumption, calculateCurveOffset, calculateCandidates } from '../src/services/calculator.js';
 import { recordRow, parseRecordRows } from '../src/services/googleSheetsService.js';
@@ -88,6 +88,13 @@ test('sequence visual joins saved plans to the new plan with continuous curve ge
  }
  const expectedTurn=[...history,...current].reduce((sum,ring)=>sum+ring.leadReq/6300,0)*180/Math.PI;
  assert.ok(Math.abs(visual.totalTurnDeg-expectedTurn)<.001);
+});
+
+test('legacy or incomplete gap settings are repaired before any planning mode runs',()=>{
+ assert.deepEqual(normalizeGapSettings({}),DEFAULT_GAP_SETTINGS);
+ assert.deepEqual(normalizeGapSettings({initialGapTop:120,initialGapBottom:'',initialGapLeft:-3,initialGapRight:null,warnThreshold:2,criticalThreshold:5}),DEFAULT_GAP_SETTINGS);
+ assert.equal(normalizeGapSettings({initialGapTop:'44',warnThreshold:'12',criticalThreshold:'4'}).initialGapTop,44);
+ assert.equal(runAutoPlan({startRingNum:'R0001',startKey:'L2',gapSettings:{}}).plannedRings.length,10);
 });
 
 test('integer BOQ allocation conserves quantities without negative segment counts',()=>{

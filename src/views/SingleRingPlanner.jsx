@@ -5,7 +5,7 @@ import { PageHeader, Field, InsightPanel, StatusBadge, ValidationErrors, EmptySt
 import RingDiagram from '../components/RingDiagram';
 import GapVisualizer from '../components/GapVisualizer';
 import { KEY_DATA } from '../data/tbmConstants';
-import { DEFAULT_GAP_SETTINGS } from '../services/advancePlanner';
+import { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../services/advancePlanner';
 import { evaluateCandidates } from '../services/smartCandidates';
 import { latestMeasured, nextRingNumber, recordKind, RECORD_LABELS, readStored, finite } from '../services/decisionSupport';
 
@@ -18,7 +18,7 @@ export default function SingleRingPlanner({ ringLogs=[],onSaveRing=async()=>{},t
   const [filter,setFilter]=useState('all');
   const [allowedTypes,setAllowedTypes]=useState(()=>readStored(`tbm_single_types_${track}`,['U','R','L']));
   useEffect(()=>{try{setProjectItem(`tbm_single_session_${track}`,JSON.stringify(form));setProjectItem(`tbm_single_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
-  const [gapSettings]=useState(()=>readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS));
+  const [gapSettings]=useState(()=>normalizeGapSettings(readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS)));
   const update=(key,value)=>{setForm(prev=>({...prev,[key]:value}));setMessage('');};
   const errors=[];
   if(!allowedTypes.length) errors.push('เลือกเปิด Segment อย่างน้อย 1 ชนิด: U, R หรือ L');

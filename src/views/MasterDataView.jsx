@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { Database, Grid, RotateCw, CheckCircle2, Compass, TrendingUp, Plus, Trash2, Save, RotateCcw, Sparkles, Ban, Lock, Boxes } from 'lucide-react';
 import { KEY_DATA, SUITABILITY_MATRIX } from '../data/tbmConstants';
 import { calculateTaperGeometry } from '../services/calculator';
-import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, createNewSection, createNewVerticalElement, parseSTA, estimateRingCount, computeRatioBreakdown, findBestRatioForSection, DEFAULT_GAP_SETTINGS } from '../services/advancePlanner';
+import { DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, createNewSection, createNewVerticalElement, parseSTA, estimateRingCount, computeRatioBreakdown, findBestRatioForSection, DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../services/advancePlanner';
 
 
 
@@ -16,7 +16,7 @@ export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   const [hSections, setHSections] = useState(() => {
     try {
       const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`);
-      if (saved) return JSON.parse(saved);
+      if (saved) return normalizeGapSettings(JSON.parse(saved));
       const session = JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`) || '{}');
       if (Array.isArray(session.sections) && session.sections.length) return session.sections;
       const legacy = localStorage.getItem('tbm_horizontal_alignment');

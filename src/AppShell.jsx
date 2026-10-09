@@ -19,6 +19,7 @@ import { fetchSheetSnapshot, flushPendingProjectState, flushPendingRecords, isSh
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
 import { tbmMode } from './services/tbmMode';
+import { normalizeGapSettings } from './services/gapSettings';
 
 const menus = [
   { id:'advanceplanner', label:'วางแผนแนวอุโมงค์', icon:Compass, group:'วางแผนและตรวจค่า' },
@@ -67,6 +68,15 @@ export default function AppShell() {
   const backupMade = useRef(false);
   useEffect(()=>{ logsRef.current=ringLogs; },[ringLogs]);
   useEffect(()=>{ plansRef.current=plans; },[plans]);
+
+  useEffect(()=>{
+    const stored=readStored('tbm_gap_settings',{});
+    const normalized=normalizeGapSettings(stored);
+    if(JSON.stringify(stored)!==JSON.stringify(normalized)) {
+      try { setProjectItem('tbm_gap_settings',JSON.stringify(normalized)); }
+      catch { /* planning screens still use their repaired in-memory values */ }
+    }
+  },[]);
 
   useEffect(()=>subscribeRecordChanges(({operation,records})=>{
     const normalized=(records||[]).map(canonical);

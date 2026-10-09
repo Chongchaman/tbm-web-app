@@ -7,7 +7,7 @@ import GapVisualizer from '../components/GapVisualizer';
 import Tunnel2DVisualizer from '../components/Tunnel2DVisualizer';
 import { KEY_DATA } from '../data/tbmConstants';
 import { runAutoPlan } from '../services/autoPlanner';
-import { DEFAULT_GAP_SETTINGS } from '../services/advancePlanner';
+import { DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../services/advancePlanner';
 import { latestMeasured, nextRingNumber, readStored, exportCSV, RECORD_LABELS, recordKind, ringNumber } from '../services/decisionSupport';
 import { buildSequenceVisualPlan } from '../services/sequenceVisual';
 
@@ -22,7 +22,7 @@ export default function SequencePlanner({ringLogs=[],plans=[],onBatchSave=async(
   });
   const [allowedTypes,setAllowedTypes]=useState(()=>readStored(`tbm_sequence_types_${track}`,['U','R','L']));
   useEffect(()=>{try{setProjectItem(`tbm_sequence_session_${track}`,JSON.stringify(form));setProjectItem(`tbm_sequence_types_${track}`,JSON.stringify(allowedTypes));}catch{/* plan remains in memory */}},[track,form,allowedTypes]);
-  const [gapSettings]=useState(()=>readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS));
+  const [gapSettings]=useState(()=>normalizeGapSettings(readStored('tbm_gap_settings',DEFAULT_GAP_SETTINGS)));
   const [selection,setSelection]=useState(1);
   const [onlyIssues,setOnlyIssues]=useState(false);
   const [saving,setSaving]=useState(false);
