@@ -76,19 +76,22 @@ test('sequence planner is deterministic, preserves transitions, and sums actual 
  assert.throws(()=>runAutoPlan({...input,allowedTypes:['X']}));
 });
 
-test('straight planning varies key loops and may double a type to correct lead',()=>{
+test('straight planning repeats each pair to the limit, doubles at the boundary and balances R/L',()=>{
  assert.equal(validateStraightAntiRollCycle(),true);
  assert.equal(STRAIGHT_ANTI_ROLL_CYCLE.length,18);
  const plan=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:20,alignmentType:'straight',allowedTypes:['U','R','L']});
  assert.ok(plan.plannedRings.every(ring=>ring.planningRule==='adaptive-anti-roll'));
  assert.ok(new Set(plan.plannedRings.map(ring=>ring.key)).size>=6);
- const keys=['L2',...plan.plannedRings.map(ring=>ring.key)];
- for(let index=3;index<keys.length;index++) assert.notDeepEqual(keys.slice(index-3,index+1),[keys[index-1],keys[index],keys[index-1],keys[index]]);
+ const keys=plan.plannedRings.map(ring=>ring.key);
+ assert.deepEqual(keys.slice(0,6),[keys[0],keys[1],keys[0],keys[1],keys[0],keys[1]]);
+ assert.equal(KEY_DATA[keys[5]].type,KEY_DATA[keys[6]].type);
+ assert.equal(KEY_DATA[keys[11]].type,KEY_DATA[keys[12]].type);
+ assert.notEqual(KEY_DATA[keys[6]].type,KEY_DATA[keys[12]].type);
+ assert.equal(plan.rCount,plan.lCount);
+ const hundred=runAutoPlan({startRingNum:'R0001',startKey:'L2',startHLead:0,startVLead:0,ringCount:100,alignmentType:'straight',allowedTypes:['R','L'],maxPairLoops:3});
+ assert.deepEqual([hundred.rCount,hundred.lCount],[50,50]);
  const correction=runAutoPlan({startRingNum:'R0001',startKey:'L15',startHLead:-55.43,startVLead:-22.96,ringCount:2,alignmentType:'straight',allowedTypes:['U','R','L']});
- assert.equal(correction.plannedRings[0].type,'L');
- assert.match(correction.plannedRings[0].reason,/เบิ้ล LT เพื่อแก้ Lead/);
- const correctionTypes=['L',...runAutoPlan({startRingNum:'R0001',startKey:'L15',startHLead:-55.43,startVLead:-22.96,ringCount:12,alignmentType:'straight',allowedTypes:['U','R','L']}).plannedRings.map(r=>r.type)];
- for(let index=2;index<correctionTypes.length;index++) assert.notDeepEqual(correctionTypes.slice(index-2,index+1),[correctionTypes[index],correctionTypes[index],correctionTypes[index]]);
+ assert.notEqual(correction.plannedRings[0].type,correction.plannedRings[1].type);
  assert.ok(evaluateCandidates({beforeKey:'R4',alignmentType:'straight',allowedTypes:['U','R','L']}).some(candidate=>candidate.type==='R'));
  assert.ok(evaluateCandidates({beforeKey:'L2',alignmentType:'straight',allowedTypes:['L']}).every(candidate=>candidate.type==='L'));
 });
@@ -102,22 +105,26 @@ test('users can cap an alternating key-pair loop before the planner changes pair
  const candidates=evaluateCandidates({beforeKey:'R1',alignmentType:'straight',allowedTypes:['R','L'],recentKeys:threeLoops,maxPairLoops:3,lookahead:false});
  assert.equal(candidates.some(candidate=>candidate.key==='L15'),false);
  assert.ok(candidates.length>0);
- const autoKeys=['L2',...runAutoPlan({startKey:'L2',startHLead:0,startVLead:0,ringCount:20,alignmentType:'straight',allowedTypes:['R','L'],maxPairLoops:1}).plannedRings.map(ring=>ring.key)];
+ const autoKeys=runAutoPlan({startKey:'L2',startHLead:0,startVLead:0,ringCount:20,alignmentType:'straight',allowedTypes:['R','L'],maxPairLoops:1}).plannedRings.map(ring=>ring.key);
  for(let index=2;index<autoKeys.length;index++) assert.notEqual(autoKeys[index],autoKeys[index-2]);
  const straight={...section,code:'LOOP-LIMIT',sectionType:'tangent',direction:'straight',radius:0,startSTA:'00+000.000',endSTA:'00+028.000',ratio:{un:0,rt:1,lt:1},allowedTypes:['R','L']};
  const vertical={code:'FLAT-LOOP-LIMIT',curveType:'constant_grade',startSTA:straight.startSTA,endSTA:straight.endSTA,startElev:0,endElev:0,gradePct:0,radiusV:0};
- const advanceKeys=['L15',...runAdvancePlan({sections:[straight],verticalAlignment:[vertical],startKey:'L15',startHLead:0,startVLead:0,maxPairLoops:1,recovery:{initialStateConfirmed:true}}).plannedRings.map(ring=>ring.selectedKey)];
+ const advanceKeys=runAdvancePlan({sections:[straight],verticalAlignment:[vertical],startKey:'L15',startHLead:0,startVLead:0,maxPairLoops:1,recovery:{initialStateConfirmed:true}}).plannedRings.map(ring=>ring.selectedKey);
  for(let index=2;index<advanceKeys.length;index++) assert.notEqual(advanceKeys[index],advanceKeys[index-2]);
  assert.throws(()=>runAutoPlan({alignmentType:'straight',maxPairLoops:0}),/ลูปคู่เดิมสูงสุด/);
  assert.throws(()=>runAdvancePlan({maxPairLoops:11}),/ลูปคู่เดิมสูงสุด/);
 });
 
-test('continuous straight planning changes key loops instead of repeating A-B-A-B',()=>{
+test('continuous straight planning repeats three loops then alternates the doubled side',()=>{
  const straight={...section,code:'ANTI-ROLL',sectionType:'tangent',direction:'straight',radius:0,startSTA:'00+000.000',endSTA:'00+042.000',ratio:{un:0,rt:1,lt:1},allowedTypes:['R','L']};
  const vertical={code:'FLAT-ANTI-ROLL',curveType:'constant_grade',startSTA:straight.startSTA,endSTA:straight.endSTA,startElev:0,endElev:0,gradePct:0,radiusV:0};
  const plan=runAdvancePlan({sections:[straight],verticalAlignment:[vertical],startKey:'L15',startHLead:0,startVLead:0,recovery:{initialStateConfirmed:true}});
  const keys=plan.plannedRings.map(ring=>ring.selectedKey);
- for(let index=3;index<keys.length;index++) assert.notDeepEqual(keys.slice(index-3,index+1),[keys[index-1],keys[index],keys[index-1],keys[index]]);
+ assert.deepEqual(keys.slice(0,6),[keys[0],keys[1],keys[0],keys[1],keys[0],keys[1]]);
+ assert.equal(KEY_DATA[keys[5]].type,KEY_DATA[keys[6]].type);
+ assert.equal(KEY_DATA[keys[11]].type,KEY_DATA[keys[12]].type);
+ assert.notEqual(KEY_DATA[keys[6]].type,KEY_DATA[keys[12]].type);
+ assert.ok(Math.abs(plan.counts.rt-plan.counts.lt)<=1);
  assert.ok(plan.plannedRings.every(ring=>ring.rolling));
 });
 

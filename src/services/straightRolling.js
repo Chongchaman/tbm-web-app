@@ -18,14 +18,44 @@ export const STRAIGHT_ANTI_ROLL_PAIR_COUNT = STRAIGHT_ANTI_ROLL_CYCLE.length / 2
 export const DEFAULT_MAX_PAIR_LOOPS = 3;
 export const MAX_PAIR_LOOPS_LIMIT = 10;
 
-function alternatingSuffixLength(keys = []) {
-  if (keys.length < 2 || keys.at(-1) === keys.at(-2)) return Math.min(keys.length, 1);
-  let length = 2;
-  for (let index = keys.length - 3; index >= 0; index--) {
-    if (keys[index] !== keys[index + 2] || keys[index] === keys[index + 1]) break;
-    length++;
+const oppositeType = type => type === 'L' ? 'R' : type === 'R' ? 'L' : null;
+
+function straightHistory(previousKey, recentKeys = []) {
+  const history = recentKeys.length && recentKeys.at(-1) !== previousKey ? [...recentKeys, previousKey].slice(-24) : recentKeys.slice(-24);
+  let start = history.length;
+  while (start > 0 && ['L', 'R'].includes(KEY_DATA[history[start - 1]]?.type)) start--;
+  const directional = history.slice(start);
+  let blockStart = 0;
+  for (let index = 1; index < directional.length; index++) {
+    if (KEY_DATA[directional[index]]?.type === KEY_DATA[directional[index - 1]]?.type) blockStart = index;
   }
-  return length;
+  return { history, block: directional.slice(blockStart) };
+}
+
+export function straightLoopPolicy(previousKey, recentKeys = [], maxPairLoops = DEFAULT_MAX_PAIR_LOOPS) {
+  const limit = Math.min(MAX_PAIR_LOOPS_LIMIT, Math.max(1, Number(maxPairLoops) || DEFAULT_MAX_PAIR_LOOPS));
+  const { history, block } = straightHistory(previousKey, recentKeys);
+  if (!block.length) return { phase: 'start', limit, history, block, requiredType: null, requiredKey: null, pairKeys: [] };
+  if (block.length === 1) return { phase: 'establish', limit, history, block, requiredType: oppositeType(KEY_DATA[block[0]]?.type), requiredKey: null, pairKeys: [block[0]] };
+  const pairKeys = block.slice(0, 2);
+  if (block.length < limit * 2) {
+    return { phase: 'repeat', limit, history, block, requiredType: KEY_DATA[pairKeys[block.length % 2]]?.type, requiredKey: pairKeys[block.length % 2], pairKeys };
+  }
+  return { phase: 'switch', limit, history, block, requiredType: KEY_DATA[block.at(-1)]?.type, requiredKey: null, pairKeys };
+}
+
+function loopCandidateAllowed(policy, previousKey, candidateKey) {
+  const candidateType = KEY_DATA[candidateKey]?.type;
+  if (!['L', 'R'].includes(candidateType)) return false;
+  if (policy.phase === 'start') return true;
+  if (policy.phase === 'repeat') return candidateKey === policy.requiredKey;
+  if (candidateType !== policy.requiredType) return false;
+  if (policy.phase === 'establish') return NEXT_RING_TABLE[candidateKey]?.includes(previousKey) === true;
+  if (policy.phase === 'switch') {
+    return candidateKey !== previousKey && (NEXT_RING_TABLE[candidateKey] || []).some(next =>
+      KEY_DATA[next]?.type === oppositeType(candidateType) && NEXT_RING_TABLE[next]?.includes(candidateKey));
+  }
+  return false;
 }
 
 export function straightAntiRollEnabled(alignmentType, allowedTypes = []) {
@@ -45,22 +75,22 @@ export function straightAntiRollMeta(previousKey, candidateKey, recentKeys = [],
   const alternatesType = !['L', 'R'].includes(previousType) ||
     (previousType === 'L' && candidateType === 'R') || (previousType === 'R' && candidateType === 'L');
   const followsCycle = expectedKey === candidateKey;
-  const limit = Math.min(MAX_PAIR_LOOPS_LIMIT, Math.max(1, Number(maxPairLoops) || DEFAULT_MAX_PAIR_LOOPS));
-  const recent = recentKeys.at(-1) === previousKey ? recentKeys.slice(-24) : [...recentKeys, previousKey].slice(-24);
-  const previousAlternatingLength = alternatingSuffixLength(recent);
-  const alternatingLength = alternatingSuffixLength([...recent, candidateKey]);
-  const pairLoopCount = Math.floor(alternatingLength / 2);
-  const loopLimitExceeded = alternatingLength > limit * 2;
-  const changedPairAfterLimit = previousAlternatingLength >= limit * 2 && alternatingLength <= 2;
+  const policy = straightLoopPolicy(previousKey, recentKeys, maxPairLoops);
+  const limit = policy.limit;
+  const recent = policy.history;
+  const loopAllowed = loopCandidateAllowed(policy, previousKey, candidateKey);
+  const pairLoopCount = policy.phase === 'repeat' ? Math.floor((policy.block.length + 1) / 2) : policy.phase === 'establish' ? 1 : Math.floor(policy.block.length / 2);
+  const loopLimitExceeded = !loopAllowed;
+  const changedPairAfterLimit = policy.phase === 'switch' && loopAllowed;
   const lastUseDistance = [...recent].reverse().findIndex(key => key === candidateKey);
-  const repeatsPair = alternatingLength >= 4;
+  const repeatsPair = policy.phase === 'repeat' && loopAllowed;
   let sameTypeRun = 1;
   for (let index=recent.length-1; index>=0 && KEY_DATA[recent[index]]?.type===candidateType; index--) sameTypeRun++;
 
   // This is a preference, not a safety override. Hard Gap, suitability and
   // alignment constraints in the planner still carry much larger costs.
-  const alternationPenalty = alternatesType ? 0 : 20_000;
-  const cyclePenalty = expectedKey && !followsCycle ? 2_500 : 0;
+  const alternationPenalty = loopAllowed ? 0 : 20_000;
+  const cyclePenalty = policy.phase !== 'repeat' && expectedKey && !followsCycle ? 2_500 : 0;
   const recentKeyPenalty = lastUseDistance >= 0 && lastUseDistance < 8 ? (8 - lastUseDistance) * 450 : 0;
   const repeatedPairPenalty = loopLimitExceeded ? 1_000_000_000 : 0;
   const longSameTypePenalty = sameTypeRun > 2 ? (sameTypeRun - 2) * 20_000 : 0;
@@ -70,7 +100,8 @@ export function straightAntiRollMeta(previousKey, candidateKey, recentKeys = [],
     expectedKey,
     followsCycle,
     alternatesType,
-    repeatsPair, pairLoopCount, maxPairLoops: limit, loopLimitExceeded, changedPairAfterLimit,
+    repeatsPair, pairLoopCount, maxPairLoops: limit, loopAllowed, loopLimitExceeded, changedPairAfterLimit,
+    loopPhase: policy.phase, pairKeys: policy.pairKeys, requiredKey: policy.requiredKey, requiredType: policy.requiredType,
     penalty, alternationPenalty, cyclePenalty, recentKeyPenalty, repeatedPairPenalty, longSameTypePenalty, sameTypeRun,
     cycleStep: cycleIndex < 0 ? null : Math.floor(cycleIndex / 2) + 1,
     pairCount: STRAIGHT_ANTI_ROLL_PAIR_COUNT,

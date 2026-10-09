@@ -17,7 +17,7 @@ export function runAutoPlan({startRingNum='R0016',startKey='L2',startHLead=38.39
   if(!Array.isArray(allowedTypes) || !allowedTypes.length || allowedTypes.some(type=>!['U','R','L'].includes(type))) errors.push('ต้องอนุญาตเซ็กเมนต์อย่างน้อย 1 ชนิด');
   if(errors.length) throw new Error(errors.join(' · '));
   const count=Number(ringCount), start=Number(String(startRingNum).replace(/^R/i,''));
-  let currentKey=startKey,currentH=Number(startHLead),currentV=Number(startVLead),recentKeys=[startKey];
+  let currentKey=startKey,currentH=Number(startHLead),currentV=Number(startVLead),recentKeys=[];
   const plannedRings=[];
   for(let step=1;step<=count;step++) {
     let beams=[{key:currentKey,h:currentH,v:currentV,cost:0,first:null,recentKeys}];

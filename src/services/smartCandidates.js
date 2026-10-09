@@ -7,12 +7,13 @@ export function evaluateCandidates({ beforeKey='R13', beforeHLead=0, beforeVLead
   if(!KEY_DATA[beforeKey]) return [];
   const limits={...getLimits(gapSettings),lead:Number(leadLimit)};
   const alternateStraight=straightAntiRollEnabled(alignmentType,allowedTypes);
+  const historySeed=recentKeys;
   const keysFor=previousKey=>{
     const available=(NEXT_RING_TABLE[previousKey]||[]).filter(key=>allowedTypes.includes(KEY_DATA[key].type));
     if(!alternateStraight) return available;
     return available.filter(key=>['L','R'].includes(KEY_DATA[key].type));
   };
-  function candidatesFor(previousKey,h,v,history=recentKeys) {
+  function candidatesFor(previousKey,h,v,history=historySeed) {
     const available=keysFor(previousKey);
     const loopCompliant=alternateStraight?available.filter(key=>!straightAntiRollMeta(previousKey,key,history,maxPairLoops).loopLimitExceeded):available;
     return loopCompliant.map(key=>{
@@ -36,12 +37,13 @@ export function evaluateCandidates({ beforeKey='R13', beforeHLead=0, beforeVLead
     });
   }
   const evaluated=candidatesFor(beforeKey,beforeHLead,beforeVLead).map(candidate=>{
-    const future=lookahead?candidatesFor(candidate.key,candidate.afterHLead,candidate.afterVLead,[...recentKeys,candidate.key].slice(-24)):[];
+    const future=lookahead?candidatesFor(candidate.key,candidate.afterHLead,candidate.afterVLead,[...historySeed,candidate.key].slice(-24)):[];
     const nextCost=future.length?Math.min(...future.map(c=>c.cost)):lookahead?1000000:0;
     const totalCost=candidate.cost+nextCost*.35;
     const doublesType=alternateStraight&&KEY_DATA[beforeKey]?.type===candidate.type;
-    const loopReason=candidate.rolling?.changedPairAfterLimit?`ครบ ${candidate.rolling.maxPairLoops} ลูปแล้ว เปลี่ยนคู่คีย์`:candidate.rolling?.repeatsPair?`ลูปคู่เดิม ${candidate.rolling.pairLoopCount}/${candidate.rolling.maxPairLoops}`:'Anti-Roll เปลี่ยนตำแหน่งคีย์';
-    const reason=[...(alternateStraight?[doublesType?`เบิ้ล ${candidate.type==='R'?'RT':'LT'} เพื่อแก้ Lead`:'สลับ RT/LT',loopReason]:[]),`Suitability ${candidate.suitability}`,`Lead H/V ${candidate.afterHLead}/${candidate.afterVLead} mm`,`Gap คาดการณ์ต่ำสุด ${candidate.assessment.minGap} mm`,`ห่างเป้าหมาย ${candidate.drift} mm`,...(lookahead?['ประเมินทางเลือกของริงถัดไปด้วย']:[])].join(' · ');
+    const loopReason=candidate.rolling?.changedPairAfterLimit?`ครบ ${candidate.rolling.maxPairLoops} ลูป · เบิ้ลเพื่อเปลี่ยนคู่คีย์`:candidate.rolling?.repeatsPair?`ลูปคู่ ${candidate.rolling.pairKeys.join(' ↔ ')} รอบ ${candidate.rolling.pairLoopCount}/${candidate.rolling.maxPairLoops}`:candidate.rolling?.loopPhase==='establish'?'ตั้งคู่คีย์ใหม่':'เริ่มลูป Anti-Roll';
+    const actionReason=doublesType?(candidate.rolling?.changedPairAfterLimit?`เบิ้ล ${candidate.type==='R'?'RT':'LT'} เพื่อเปลี่ยนลูป`:`เบิ้ล ${candidate.type==='R'?'RT':'LT'} เพื่อแก้ Lead`):'สลับ RT/LT';
+    const reason=[...(alternateStraight?[actionReason,loopReason]:[]),`Suitability ${candidate.suitability}`,`Lead H/V ${candidate.afterHLead}/${candidate.afterVLead} mm`,`Gap คาดการณ์ต่ำสุด ${candidate.assessment.minGap} mm`,`ห่างเป้าหมาย ${candidate.drift} mm`,...(lookahead?['ประเมินทางเลือกของริงถัดไปด้วย']:[])].join(' · ');
     return {...candidate,totalCost,rankScore:round(100-totalCost),reason,nextCost,planningRule:alternateStraight?'adaptive-anti-roll':'optimized'};
   });
   return evaluated.sort((a,b)=>a.totalCost-b.totalCost || a.drift-b.drift || a.key.localeCompare(b.key));

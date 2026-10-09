@@ -173,13 +173,15 @@ export function runAdvancePlan({
   const responseDiameter=Number(config.responseDiameterMm);
   const W=getAdaptiveWeights(ringLogs), limit=Number(maxTolerance);
   const limits={...getLimits(gConfig),lead:limit};
+  const recoveryActive=Math.abs(Number(config.startDeviationH))>0.5||Math.abs(Number(config.startDeviationV))>0.5||
+    Math.abs(Number(config.startHeadingErrorDeg))>0.001||Math.abs(Number(config.startPitchErrorDeg))>0.001;
   // A full vertical profile is required before an endpoint can be marked known.
   const coveredVertical=verticalAlignment.map(v=>[Math.min(parseSTA(v.startSTA),parseSTA(v.endSTA)),Math.max(parseSTA(v.startSTA),parseSTA(v.endSTA))]).sort((a,b)=>a[0]-b[0]);
   let coveredTo=Math.min(route.staAt(0),route.staAt(route.totalDistance));
   for(const [from,to] of coveredVertical) {if(from>coveredTo+.000001)break;if(to>coveredTo)coveredTo=to;}
   const verticalKnown=coveredTo>=Math.max(route.staAt(0),route.staAt(route.totalDistance)) && verticalAlignment.length>0;
   let current={...initialRecoveryState(route,config),key:startKey,h:Number(startHLead),v:Number(startVLead),
-    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}])),recentKeys:[startKey]};
+    used:Object.fromEntries(sections.map(sec=>[sec.code,{U:0,R:0,L:0}])),recentKeys:[],recentSectionCode:null};
   const plannedRings=[],violations=[],gapAlerts=[];
   const targetAt=distance=>({
     h:recoveryTarget(distance,recoveryLength,Number(config.startDeviationH),radians(Number(config.startHeadingErrorDeg))),
@@ -189,7 +191,8 @@ export function runAdvancePlan({
     const data=KEY_DATA[key], size=SEGMENT_SIZES[data.type], sizeM=size/1000;
     const sec=route.at(state.distance).section;
     const antiRollEnabled=straightAntiRollEnabled(sec.sectionType==='tangent'||sec.direction==='straight'?'straight':sec.direction,sec.allowedTypes||['U','R','L']);
-    const rolling=antiRollEnabled?straightAntiRollMeta(state.key,key,state.recentKeys,maxPairLoops):null;
+    const loopHistory=state.recentSectionCode===sec.code?state.recentKeys:[];
+    const rolling=antiRollEnabled&&!recoveryActive?straightAntiRollMeta(state.key,key,loopHistory,maxPairLoops):null;
     const turnH=-data.hLead/responseDiameter,turnV=-data.vLead/responseDiameter;
     const projected=propagateRecovery(state,route,sizeM,turnH,turnV);
     const leadReq=responseDiameter*(projected.dtaTheta-state.dtaTheta);
@@ -226,14 +229,10 @@ export function runAdvancePlan({
       (Math.max(0,Math.abs(projected.deviationH)-Number(config.endpointToleranceMm))+Math.max(0,Math.abs(projected.deviationV)-Number(config.endpointToleranceMm))+Math.max(0,Math.abs(projected.longitudinalDeviation)-Number(config.endpointToleranceMm)))*10000+
       (Math.max(0,Math.abs(degrees(projected.headingError))-Number(config.endpointHeadingToleranceDeg))+Math.max(0,Math.abs(degrees(projected.pitchError))-Number(config.endpointHeadingToleranceDeg)))*1000000 : 0;
     const outsideAlignmentCost=(Math.max(0,Math.abs(projected.deviationH)-limits.deviation)+Math.max(0,Math.abs(projected.deviationV)-limits.deviation))*3000;
-    const recoveryActive=Math.abs(Number(config.startDeviationH))>0.5||Math.abs(Number(config.startDeviationV))>0.5||
-      Math.abs(Number(config.startHeadingErrorDeg))>0.001||Math.abs(Number(config.startPitchErrorDeg))>0.001;
-    // Alignment recovery wins while a measured correction is active. Once the
-    // plan starts on alignment, the full anti-roll preference controls ties.
-    // Continuous planning may need to leave the ideal nine-pair cycle to
-    // recover alignment. It still blocks an immediate A-B-A-B loop and gently
-    // spreads recently used key positions.
-    const rollingPreference=rolling?(rolling.recentKeyPenalty+rolling.repeatedPairPenalty):0;
+    // A measured alignment recovery may temporarily leave the production loop.
+    // With no recovery active, candidate filtering enforces the configured
+    // repeated pair, balanced boundary double, and next pair.
+    const rollingPreference=rolling?(rolling.recentKeyPenalty+(recoveryActive?0:rolling.repeatedPairPenalty)):0;
     const rollingCost=rollingPreference*(recoveryActive?0.1:1)+(rolling?.longSameTypePenalty||0);
     const cost=hardCost+softCost+alignmentCost+outsideAlignmentCost+terminalCost+leadCost+ratioCost+endpointCost+rollingCost;
     const nextUsed={...state.used,[sec.code]:{...used,[data.type]:used[data.type]+1}};
@@ -241,7 +240,8 @@ export function runAdvancePlan({
       leadReq:rounded(leadReq,2),vLeadReq:rounded(vLeadReq,2),afterH,afterV,suitability,...gaps,minGap,
       exceedsLimit:overLimitAmount>0,overLimitAmount:rounded(overLimitAmount,2),isGapWarn:minGap<=gConfig.warnThreshold,
       isGapCrit:minGap<=gConfig.criticalThreshold,articulationDeg:rounded(articulationDeg),taperTurnDeg:rounded(articulationDeg),articulationExceeded:articulationDeg>Number(config.maxTaperTurnDeg),
-      target,cost,totalScore:rounded(-cost,2),rolling,rollingCost,projected:{...projected,key,h:afterH,v:afterV,used:nextUsed,recentKeys:[...state.recentKeys,key].slice(-24)}};
+      target,cost,totalScore:rounded(-cost,2),rolling,rollingCost,projected:{...projected,key,h:afterH,v:afterV,used:nextUsed,
+        recentKeys:antiRollEnabled?[...loopHistory,key].slice(-24):[],recentSectionCode:sec.code}};
   };
   const candidates=state=>{
     const available=(NEXT_RING_TABLE[state.key]||[]).filter(key=>{
@@ -251,7 +251,8 @@ export function runAdvancePlan({
     });
     const sec=route.at(state.distance).section;
     const antiRollEnabled=straightAntiRollEnabled(sec.sectionType==='tangent'||sec.direction==='straight'?'straight':sec.direction,sec.allowedTypes||['U','R','L']);
-    return antiRollEnabled?available.filter(key=>!straightAntiRollMeta(state.key,key,state.recentKeys,maxPairLoops).loopLimitExceeded):available;
+    const loopHistory=state.recentSectionCode===sec.code?state.recentKeys:[];
+    return antiRollEnabled&&!recoveryActive?available.filter(key=>!straightAntiRollMeta(state.key,key,loopHistory,maxPairLoops).loopLimitExceeded):available;
   };
   const select=state=>{
     const nearEndpoint=route.totalDistance-state.distance<=8.4;
@@ -283,8 +284,9 @@ export function runAdvancePlan({
     const {projected:ignoredProjected,target:ignoredTarget,...fields}=chosen;
     void ignoredProjected;void ignoredTarget;
     const doublesType=chosen.rolling&&KEY_DATA[current.key]?.type===chosen.type;
-    const loopReason=chosen.rolling?.changedPairAfterLimit?`ครบ ${chosen.rolling.maxPairLoops} ลูปแล้ว เปลี่ยนคู่คีย์`:chosen.rolling?.repeatsPair?`ลูปคู่เดิม ${chosen.rolling.pairLoopCount}/${chosen.rolling.maxPairLoops}`:'Anti-Roll เปลี่ยนตำแหน่งคีย์';
-    const antiRollReason=chosen.rolling?`${doublesType?`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อแก้ Lead/แนว`:'สลับ RT/LT'} · ${loopReason} · `:'';
+    const loopReason=chosen.rolling?.changedPairAfterLimit?`ครบ ${chosen.rolling.maxPairLoops} ลูป · เบิ้ลเพื่อเปลี่ยนคู่คีย์`:chosen.rolling?.repeatsPair?`ลูปคู่ ${chosen.rolling.pairKeys.join(' ↔ ')} รอบ ${chosen.rolling.pairLoopCount}/${chosen.rolling.maxPairLoops}`:chosen.rolling?.loopPhase==='establish'?'ตั้งคู่คีย์ใหม่':'เริ่มลูป Anti-Roll';
+    const actionReason=doublesType?(chosen.rolling?.changedPairAfterLimit?`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อเปลี่ยนลูป`:`เบิ้ล ${chosen.type==='R'?'RT':'LT'} เพื่อแก้ Lead/แนว`):'สลับ RT/LT';
+    const antiRollReason=chosen.rolling?`${actionReason} · ${loopReason} · `:'';
     const aiReasoning=`${antiRollReason}${driftTrend==='converging'?'กำลังกลับเข้าแนว':driftTrend==='diverging'?'ยังเยื้องเพิ่ม — ต้องตรวจทาน':'ระยะเยื้องคงที่'} · H/V คาดการณ์ ${rounded(next.deviationH,1)}/${rounded(next.deviationV,1)} mm · มุมคลาด H/V ${rounded(degrees(next.headingError),3)}/${rounded(degrees(next.pitchError),3)}° · เหลือ ${rounded(remaining,1)} m`;
     const ring={...fields,recordType:'planned',initialStateConfirmed:config.initialStateConfirmed===true,initialPoseSTA:formatSTA(route.staAt(0)),step,ringNum,ringNumInt,sta:formatSTA(route.staAt(current.distance)),
       endSTA:formatSTA(route.staAt(next.distance)),dist:rounded(current.distance,3),sectionCode:sec.code,sectionName:sec.name,sectionType:sec.sectionType,
