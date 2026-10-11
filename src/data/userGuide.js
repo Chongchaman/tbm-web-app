@@ -14,6 +14,7 @@ export const GUIDE_TOPICS = [
         ['ดูตำแหน่งเยื้อง แนวแก้กลับ และผลปลายทาง','วางแผนแนวอุโมงค์'],
         ['ดูหัวเจาะบน Top View และรูปตัดตามยาว','ภาพตำแหน่งหัวเจาะ'],
         ['ตรวจชั้นดินที่ STA ของ TBM1/TBM2','ข้อมูลชั้นดิน'],
+        ['กำหนด Face pressure และ Tail grout pressure รายช่วง STA','แรงดันหน้าเจาะและเกร้า'],
         ['เปรียบเทียบคีย์สำหรับริงถัดไป','คำนวณริงเดี่ยว'],
         ['วางลำดับคีย์ 1–100 ริงตามเงื่อนไขเดียวกัน','วางแผนต่อเนื่อง'],
         ['ดูภาพรวมเฉพาะข้อมูลสนามหรือแผน','ภาพรวมโครงการ'],
@@ -54,6 +55,25 @@ export const GUIDE_TOPICS = [
       'ตรวจชื่อชั้นดิน ระดับ mRL เลขหน้าแบบ และเส้นเปรียบเทียบอีกแนว โดย E/B ครอบคลุม 18+400.000–23+390.269 และ W/B ครอบคลุม 18+400.000–23+396.443',
       'ตรวจชั้นดินใกล้รอยต่อและข้อมูล borehole กับวิศวกรธรณีเทคนิคก่อนใช้ผลหน้างาน',
     ]},{paragraphs:['ข้อมูลสีชั้นดินและเส้นระดับอุโมงค์ถอดจากแบบ Orange Line เฉพาะช่วง OR10 ถึง TCC เพื่อช่วยมองภาพรวม']}]},
+  {id:'pressure',title:'Face pressure และ Tail grouting รายช่วง STA',description:'กำหนดค่าเป้าหมาย ช่วงยอมรับ ค่าจริง และสัญญาณเสี่ยง Ground loss',keywords:'pressure face cutterhead chamber grout tail ground loss settlement heave kPa bar GWL K0',route:'pressure',routeLabel:'เปิดหน้าควบคุมแรงดัน',
+    blocks:[
+      {title:'ตั้งค่าช่วงควบคุม',steps:[
+        'เลือก TBM1 (EB) หรือ TBM2 (WB) ระบบแบ่งแนวเป็น 8 ช่วงตามหน้า Profile และใช้ STA ของแต่ละเครื่องแยกกัน',
+        'กรอก STA ที่กำลังเจาะเพื่อเลือกช่วงปัจจุบัน แล้วตรวจ Ground RL, Groundwater RL, Tunnel axis RL และชั้นดินกับแบบต้นฉบับ Borehole และ Piezometer',
+        'ตรวจ Unit weight ดินเหนือและใต้น้ำ ค่า K₀, Surcharge, Safety margin และ Tolerance ระบบคำนวณ Face target จาก K₀σ′v + u + margin',
+        'กรอก Grout maximum จากข้อจำกัด Tail seal, Segment, Pump และ Method Statement ค่า Grout target ตั้งให้สูงกว่า Face ตาม margin ที่กำหนด',
+        'กรอกความกว้างริงและ Fill factor เพื่อประมาณ Tail void และ Grout volume ต่อริง แล้วปรับจากปริมาตรที่ฉีดได้จริง',
+        'กรอก Face pressure และ Grout pressure จริง ระบบจะแสดง ต่ำกว่าเกณฑ์ ใกล้ขอบ อยู่ในช่วง หรือสูงกว่าเกณฑ์',
+        'กด “ยืนยันโดยวิศวกร” เฉพาะหลังตรวจข้อมูลอ้างอิงและขีดจำกัดครบ การแก้ค่าคำนวณภายหลังจะยกเลิกสถานะยืนยันอัตโนมัติ',
+      ]},
+      {title:'อ่านความเสี่ยง',bullets:[
+        'Face pressure ต่ำกว่าช่วงควบคุมเสี่ยงดินหรือน้ำไหลเข้าหน้าเจาะและเกิด Ground loss ส่วนค่าสูงเกินไปต้องตรวจ Heave, Blowout และ Hydrofracture',
+        'Tail grout ต่ำเกินไปเสี่ยงเติม Annular gap ไม่ทันและเกิด Tail loss ส่วนค่าสูงเกินไปอาจทำให้ Ground heave, Tail seal รั่ว หรือเพิ่มแรงต่อ Segment',
+        'ต้องติดตาม Pressure ร่วมกับ Excavated volume, Screw conveyor, Advance rate, Grout volume, Tail void, Settlement และ Trigger level ของ Instrumentation',
+        'ค่าบนหน้าเว็บเป็นแรงดัน Gauge สำหรับ Screening ต้องเทียบตำแหน่งเซนเซอร์และ Calibration ของเครื่องก่อนใช้ควบคุมจริง',
+      ]},
+      {paragraphs:['ระบบเตือนระดับแนวกระโดดใกล้ STA 23+300 และชั้นดินที่อ่านไม่ชัดโดยอัตโนมัติ ช่วงดังกล่าวต้องตรวจหน้าแบบต่อเนื่องก่อนยืนยัน ค่าในหน้านี้ซิงก์ผ่าน Cloudflare D1 และส่งออก CSV แยก EB/WB ได้']},
+    ]},
   {id:'advance',title:'วางแผนแนวอุโมงค์และกลับเข้า Alignment',description:'กรอก pose จริง อ่านเส้นแก้ และตรวจปลายทางทั้งตำแหน่งกับทิศทาง',keywords:'ดึงกลับ recovery correction curve หัวเจาะ เยื้อง ปลายทาง breakthrough senior_ai ratio_guided',route:'advanceplanner',routeLabel:'เปิดหน้าวางแผนแนวอุโมงค์',
     blocks:[
       {title:'กรอกข้อมูลและคำนวณ',steps:[
