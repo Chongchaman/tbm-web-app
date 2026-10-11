@@ -15,6 +15,7 @@ export const PROJECT_KEYS = [
   'tbm_single_types_WB', 'tbm_sequence_session_EB', 'tbm_sequence_session_WB',
   'tbm_sequence_types_EB', 'tbm_sequence_types_WB', 'tbm_soil_levels',
   'tbm_soil_level_stations',
+  'tbm_pressure_control_EB', 'tbm_pressure_control_WB',
 ];
 
 let stateTimer;
@@ -67,6 +68,7 @@ export function markCloudMigrated() { localStorage.setItem(MIGRATED_KEY, '1'); }
 export function setProjectItem(key, value) {
   const previous = localStorage.getItem(key);
   localStorage.setItem(key, value);
+  if (previous !== value && PROJECT_KEYS.includes(key)) liveChannel?.postMessage({ type: 'state', key, value, sentAt: Date.now() });
   if (previous === value || !PROJECT_KEYS.includes(key) || !isCloudMigrated()) return;
   const pending = pendingStateRead();
   pending[key] = { value, queuedAt: new Date().toISOString() };
@@ -75,6 +77,29 @@ export function setProjectItem(key, value) {
     clearTimeout(stateTimer);
     stateTimer = setTimeout(() => { flushPendingProjectState().catch(() => {}); }, 120);
   }
+}
+
+export function subscribeProjectStateChanges(handler) {
+  if (typeof window === 'undefined') return () => {};
+  const receive = event => { if (event.data?.type === 'state') handler({ key:event.data.key, value:event.data.value }); };
+  const receiveLocal = event => handler(event.detail || {});
+  liveChannel?.addEventListener('message', receive);
+  window.addEventListener('tbm-project-state', receiveLocal);
+  return () => { liveChannel?.removeEventListener('message', receive); window.removeEventListener('tbm-project-state', receiveLocal); };
+}
+
+export function mergeProjectState(state) {
+  if (typeof window === 'undefined') return 0;
+  const pending = pendingStateRead();
+  let changed = 0;
+  for (const [key, value] of Object.entries(state || {})) {
+    if (!PROJECT_KEYS.includes(key) || typeof value !== 'string' || pending[key]) continue;
+    if (localStorage.getItem(key) === value) continue;
+    localStorage.setItem(key, value);
+    changed += 1;
+    window.dispatchEvent(new CustomEvent('tbm-project-state', { detail:{ key, value } }));
+  }
+  return changed;
 }
 
 export function queueRecordChanges(records, operation) {

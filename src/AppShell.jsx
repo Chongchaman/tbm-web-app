@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { LayoutDashboard, Calculator, Sparkles, Compass, Map as MapIcon, Layers, History, Database, Droplets, HardHat, Building2, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen, LogOut } from 'lucide-react';
+import { LayoutDashboard, Calculator, Sparkles, Compass, Map as MapIcon, Layers, History, Database, Droplets, HardHat, Building2, Menu, X, Cloud, Sun, Moon, Settings2, Download, BookOpen, LogOut, Gauge } from 'lucide-react';
 const AdvancePlannerView = lazy(() => import('./views/AdvancePlannerView'));
 const TunnelPositionView = lazy(() => import('./views/TunnelPositionView'));
 const SoilProfileView = lazy(() => import('./views/SoilProfileView'));
+const PressureControlView = lazy(() => import('./views/PressureControlView'));
 const AutoPlannerView = lazy(() => import('./views/AutoPlannerView'));
 const PlannerView = lazy(() => import('./views/PlannerView'));
 const DashboardView = lazy(() => import('./views/DashboardView'));
@@ -15,7 +16,7 @@ import CloudDatabaseModal from './components/CloudDatabaseModal';
 import AppearanceSettings from './components/AppearanceSettings';
 import { normalizeAppearance, appearanceTokens } from './services/appearance';
 import { INITIAL_RING_LOGS } from './data/tbmConstants';
-import { fetchCloudSnapshot, flushPendingProjectState, flushPendingRecords, isCloudConnected, isCloudMigrated, markCloudMigrated, pendingCount, queueRecordChanges, restoreProjectState, setProjectItem, subscribeRecordChanges } from './services/cloudDatabaseService';
+import { fetchCloudSnapshot, flushPendingProjectState, flushPendingRecords, isCloudConnected, isCloudMigrated, markCloudMigrated, mergeProjectState, pendingCount, queueRecordChanges, restoreProjectState, setProjectItem, subscribeRecordChanges } from './services/cloudDatabaseService';
 import { readStored, recordKind, ringNumber, validateRing } from './services/decisionSupport';
 import { recordIdentity as identity } from './services/recordIdentity';
 import { tbmMode } from './services/tbmMode';
@@ -25,6 +26,7 @@ const menus = [
   { id:'advanceplanner', label:'วางแผนแนวอุโมงค์', icon:Compass, group:'วางแผนและตรวจค่า' },
   { id:'position', label:'ภาพตำแหน่งหัวเจาะ', icon:MapIcon },
   { id:'soil', label:'ข้อมูลชั้นดิน', icon:Layers },
+  { id:'pressure', label:'แรงดันหน้าเจาะและเกร้า', icon:Gauge },
   { id:'planning', label:'คำนวณริงเดี่ยว', icon:Calculator },
   { id:'autoplanner', label:'วางแผนต่อเนื่อง', icon:Sparkles },
   { id:'dashboard', label:'ภาพรวมโครงการ', icon:LayoutDashboard, group:'ติดตามและจัดการ' },
@@ -144,6 +146,7 @@ export default function AppShell() {
         }
         markCloudMigrated();
         if(snapshot.changed===false) {setCloudState('live');return;}
+        mergeProjectState(snapshot.state);
         const nextLogs=sortRings(snapshot.records.filter(record=>recordKind(record)!=='planned').map(canonical));
         const nextPlans=sortRings(snapshot.records.filter(record=>recordKind(record)==='planned').map(canonical));
         const same=(left,right)=>left.length===right.length&&left.every((record,index)=>identity(record)===identity(right[index])&&JSON.stringify(record)===JSON.stringify(right[index]));
@@ -203,7 +206,7 @@ export default function AppShell() {
     } catch(error) {setNotice({level:'critical',text:`ลบไม่สำเร็จ: ${error.message}`});throw error;} finally {busy.current=false;}
   }
   const backup=()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({version:4,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),horizontalEB:readStored('tbm_horizontal_alignment_EB',[]),horizontalWB:readStored('tbm_horizontal_alignment_WB',[]),verticalEB:readStored('tbm_vertical_alignment_EB',[]),verticalWB:readStored('tbm_vertical_alignment_WB',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),singleEB:readStored('tbm_single_session_EB',{}),singleWB:readStored('tbm_single_session_WB',{}),singleTypesEB:readStored('tbm_single_types_EB',[]),singleTypesWB:readStored('tbm_single_types_WB',[]),sequenceEB:readStored('tbm_sequence_session_EB',{}),sequenceWB:readStored('tbm_sequence_session_WB',{}),sequenceTypesEB:readStored('tbm_sequence_types_EB',[]),sequenceTypesWB:readStored('tbm_sequence_types_WB',[]),soilLevels:readStored('tbm_soil_levels',{}),soilLevelStations:readStored('tbm_soil_level_stations',{})},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({version:5,exportedAt:new Date().toISOString(),ringLogs,plans,appearance,horizontal:readStored('tbm_horizontal_alignment',[]),vertical:readStored('tbm_vertical_alignment',[]),horizontalEB:readStored('tbm_horizontal_alignment_EB',[]),horizontalWB:readStored('tbm_horizontal_alignment_WB',[]),verticalEB:readStored('tbm_vertical_alignment_EB',[]),verticalWB:readStored('tbm_vertical_alignment_WB',[]),gapSettings:readStored('tbm_gap_settings',{}),advanceTrack,advanceEB:readStored('tbm_advance_session_EB',{}),advanceWB:readStored('tbm_advance_session_WB',{}),singleEB:readStored('tbm_single_session_EB',{}),singleWB:readStored('tbm_single_session_WB',{}),singleTypesEB:readStored('tbm_single_types_EB',[]),singleTypesWB:readStored('tbm_single_types_WB',[]),sequenceEB:readStored('tbm_sequence_session_EB',{}),sequenceWB:readStored('tbm_sequence_session_WB',{}),sequenceTypesEB:readStored('tbm_sequence_types_EB',[]),sequenceTypesWB:readStored('tbm_sequence_types_WB',[]),soilLevels:readStored('tbm_soil_levels',{}),soilLevelStations:readStored('tbm_soil_level_stations',{}),pressureEB:readStored('tbm_pressure_control_EB',{}),pressureWB:readStored('tbm_pressure_control_WB',{})},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`tbm-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const logout=async()=>{
@@ -226,6 +229,7 @@ export default function AppShell() {
       {activeTab==='advanceplanner' && <AdvancePlannerView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} ringLogs={ringLogs} onBatchSave={records=>writeRecords(records.map(r=>({...r,recordType:'planned'})))} onNavigate={navigate} theme={theme}/>}
       {activeTab==='position' && <TunnelPositionView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} onNavigate={navigate}/>}
       {activeTab==='soil' && <SoilProfileView key={advanceTrack} track={advanceTrack} onTrackChange={changeAdvanceTrack} onNavigate={navigate}/>}
+      {activeTab==='pressure' && <PressureControlView key={advanceTrack} track={advanceTrack}/>}
       {activeTab==='planning' && <PlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} onSaveRing={record=>writeRecords([{...record,track:advanceTrack,recordType:'planned'}])} theme={theme}/>}
       {activeTab==='autoplanner' && <AutoPlannerView key={advanceTrack} track={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} plans={activePlans} onBatchSave={records=>writeRecords(records.map(r=>({...r,track:advanceTrack,recordType:'planned'})))} theme={theme}/>}
       {activeTab==='dashboard' && <DashboardView key={advanceTrack} ringLogs={ringLogs.filter(r=>r.track===advanceTrack)} plans={activePlans} onNavigate={navigate} theme={theme}/>}

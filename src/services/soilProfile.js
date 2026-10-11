@@ -51,8 +51,36 @@ export function soilSheetAt(station, track) {
       !sheets.some(next => next.track === track && Math.abs(next.start - meters) < 0.000001))) || null;
 }
 
+export function soilSheetSections(track) {
+  return sheets.filter(sheet => sheet.track === track).map(sheet => ({
+    track: sheet.track,
+    start: sheet.start,
+    end: sheet.end,
+    page: sheet.page,
+    drawing: sheet.drawing,
+    minElevation: sheet.minElevation,
+    maxElevation: sheet.maxElevation,
+  }));
+}
+
 function nearestSample(sheet, station) {
   return sheet.samples.reduce((best, next) => Math.abs(next[0] - station) < Math.abs(best[0] - station) ? next : best);
+}
+
+export function groundElevationAt(station, track) {
+  const meters = stationMeters(station);
+  const sheet = soilSheetAt(meters, track);
+  if (!sheet || meters === null) return null;
+  const sample = nearestSample(sheet, meters);
+  const firstGroundIndex = [...sample[1]].findIndex(code => Boolean(SOIL_CLASSES[code]));
+  if (firstGroundIndex < 0) return null;
+  return {
+    elevation: sheet.maxElevation - firstGroundIndex,
+    sampledSTA: sample[0],
+    page: sheet.page,
+    drawing: sheet.drawing,
+    source: 'profile-grid',
+  };
 }
 
 function sampleCode(sheet, station, elevation) {
