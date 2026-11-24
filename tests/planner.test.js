@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { KEY_DATA, NEXT_RING_TABLE, INITIAL_RING_LOGS } from '../src/data/tbmConstants.js';
-import { predictGaps, assessRing, summarizeRings, validateAlignment, recordKind, finite, round, buildCSV } from '../src/services/decisionSupport.js';
+import { predictGaps, predictIncrementalGaps, diagnoseOvality, assessRing, summarizeRings, validateAlignment, recordKind, finite, round, buildCSV } from '../src/services/decisionSupport.js';
 import { evaluateCandidates } from '../src/services/smartCandidates.js';
 import { runAutoPlan } from '../src/services/autoPlanner.js';
 import { runAdvancePlan, computeRatioBreakdown, DEFAULT_ALIGNMENT_SECTIONS, DEFAULT_VERTICAL_ALIGNMENT, DEFAULT_GAP_SETTINGS, normalizeGapSettings } from '../src/services/advancePlanner.js';
@@ -324,4 +324,27 @@ test('manual compatibility API shares ranking and horizontal curves do not creat
  assert.deepEqual(calculateCandidates(options),evaluateCandidates(options));
  assert.equal(calculateCurveOffset(180,1200,'R').vLead,0);
  assert.equal(calculateCurveOffset(180,1200,'L').hLead,-calculateCurveOffset(180,1200,'R').hLead);
+});
+
+test('nominal 40mm gap, high gap >70mm warning, ovality diagnosis, and incremental gap prediction',()=>{
+ assert.equal(DEFAULT_GAP_SETTINGS.initialGapTop,40);
+ assert.equal(DEFAULT_GAP_SETTINGS.highWarnThreshold,70);
+ assert.equal(predictGaps(0,0).gapT,40);
+ assert.equal(assessRing({hLead:0,vLead:0,gapT:71,gapB:25,gapL:25,gapR:25,suitability:'Yes'}).level,'warning');
+ assert.ok(assessRing({hLead:0,vLead:0,gapT:71,gapB:25,gapL:25,gapR:25,suitability:'Yes'}).issues.some(i=>i.code==='gap-high'));
+ assert.equal(diagnoseOvality({gapT:75,gapB:15,gapL:12,gapR:14}).shape,'horizontal_oval');
+ assert.equal(diagnoseOvality({gapT:12,gapB:14,gapL:68,gapR:72}).shape,'vertical_oval');
+ const inc=predictIncrementalGaps({beforeH:0,beforeV:0,afterH:10,afterV:-20,baseGaps:{gapT:72,gapB:14,gapL:15,gapR:15}});
+ assert.deepEqual(inc,{gapT:78,gapB:8,gapL:12,gapR:18});
+});
+
+test('temporary ring mode ignores Yes/No suitability and allows all keys in enabled types',()=>{
+ const normal=evaluateCandidates({beforeKey:'R1',beforeHLead:0,beforeVLead:0,allowedTypes:['U']});
+ const temp=evaluateCandidates({beforeKey:'R1',beforeHLead:0,beforeVLead:0,allowedTypes:['U'],ignoreSuitability:true});
+ assert.ok(temp.length>normal.length);
+ assert.ok(temp.some(c=>c.key==='U1'));
+ assert.ok(temp.every(c=>!c.assessment.issues.some(i=>i.code==='suitability')));
+ const seq=runAutoPlan({startRingNum:'R0001',startKey:'R1',ringCount:4,allowedTypes:['U'],ignoreSuitability:true});
+ assert.equal(seq.plannedRings.length,4);
+ assert.ok(seq.plannedRings.every(r=>r.ignoreSuitability===true));
 });

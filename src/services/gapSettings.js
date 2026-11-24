@@ -1,10 +1,11 @@
 export const DEFAULT_GAP_SETTINGS = Object.freeze({
-  initialGapTop: 50,
-  initialGapBottom: 50,
-  initialGapLeft: 50,
-  initialGapRight: 50,
+  initialGapTop: 40,
+  initialGapBottom: 40,
+  initialGapLeft: 40,
+  initialGapRight: 40,
   warnThreshold: 15,
   criticalThreshold: 5,
+  highWarnThreshold: 70,
   shieldLength: 4.2,
 });
 
@@ -22,6 +23,10 @@ export function normalizeGapSettings(settings) {
   if (finite(source.warnThreshold) && finite(source.criticalThreshold) && critical >= 0 && warning > critical) {
     normalized.warnThreshold = warning;
     normalized.criticalThreshold = critical;
+  }
+  const highWarn = Number(source.highWarnThreshold);
+  if (finite(source.highWarnThreshold) && highWarn > normalized.warnThreshold) {
+    normalized.highWarnThreshold = highWarn;
   }
   if (finite(source.shieldLength) && Number(source.shieldLength) > 0) normalized.shieldLength = Number(source.shieldLength);
   return normalized;
