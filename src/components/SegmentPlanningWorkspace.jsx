@@ -1,4 +1,4 @@
-import { AlertTriangle, Calculator, Download, Map, Save, Settings2 } from 'lucide-react';
+import {AlertTriangle, Calculator, Download, Map, Save, Settings2, SlidersHorizontal} from 'lucide-react';
 import { KEY_DATA } from '../data/tbmConstants';
 import { Field, PageHeader, ValidationErrors } from './PlannerUI';
 import KeySuitabilityBadge from './KeySuitabilityBadge';
@@ -44,13 +44,14 @@ export default function SegmentPlanningWorkspace({
   startKey, changeStartKey, startHLead, changeStartHLead, startVLead, changeStartVLead,
   maxTolerance, changeMaxTolerance, maxPairLoops, changeMaxPairLoops, steeringSign, changeSteeringSign,
   planResult, summary, sections, resultFilter, setResultFilter, tableRings,
-  scrubStep, setScrubStep, selectedRing,
+  scrubStep, setScrubStep, selectedRing, onToggleWorkspace = () => {},
 }) {
   const machine=track==='EB'?'TBM1 · E/B':'TBM2 · W/B';
   const warningCount=summary.leadCount+summary.dtaCount+summary.gapCount;
   return <div className="planner-page">
     <PageHeader eyebrow={`Segment planning · ${machine}`} title={`วางแผน Segment ${machine}`} description="ดูแนวอุโมงค์และตารางริงพร้อมกัน เลือกริงจากตารางเพื่อดูตำแหน่งและค่าตรวจทันที" actions={<>
       <button className="btn btn-outline planner-secondary-action" onClick={()=>onNavigate('position')}><Map size={16}/>ตำแหน่งหัวเจาะ</button>
+      <button className="btn btn-outline planner-secondary-action" onClick={onToggleWorkspace} title="สลับมุมมอง Alignment เต็มรูปแบบ"><SlidersHorizontal size={16}/>มุมมองละเอียด (Alignment Cards)</button>
       <button className="btn btn-acc" onClick={handleCalculate}><Calculator size={16}/>{needsRecalc?'คำนวณใหม่':'คำนวณแผน'}</button>
       <button className="btn btn-outline" onClick={handleBatchSave} disabled={needsRecalc||saving||!planResult.plannedRings.length}><Save size={16}/>{saving?'กำลังบันทึก…':'บันทึกแผน'}</button>
     </>}/>
@@ -80,7 +81,33 @@ export default function SegmentPlanningWorkspace({
           <Field label="เป้าหมายการเลี้ยว"><select value={steeringSign} onChange={event=>changeSteeringSign(event.target.value)}><option value="steering_bias">ตรงข้าม Lead โค้ง</option><option value="standard_positive">ตาม Lead โค้ง</option></select></Field>
         </div>
         <label className="planner-survey-confirm"><input type="checkbox" checked={recovery.initialStateConfirmed} onChange={event=>changeRecovery('initialStateConfirmed',event.target.checked)}/>ยืนยันค่าตำแหน่งและมุมจาก Survey / Navigation</label>
-        <div className="planner-alignment-row"><div><strong>Alignment {sections.length} ช่วง</strong><span>{sections.map(section=>section.code).join(' → ')}</span></div><button className="btn btn-outline" onClick={handleResetSections}>ใช้ช่วงตาม Drawing</button><button className="btn btn-outline" onClick={()=>onNavigate('masterdata')}>แก้ Alignment และ Ratio</button></div>
+        <div className="planner-alignment-row">
+          <div>
+            <strong>Alignment {sections.length} ช่วงที่นำมาแพลน Segment</strong>
+            <span>{sections.map(s => `${s.code} (${s.direction === 'right' ? 'โค้งขวา R=' + s.radius + 'm' : s.direction === 'left' ? 'โค้งซ้าย R=' + s.radius + 'm' : 'ทางตรง'})`).join(' → ')}</span>
+          </div>
+          <button className="btn btn-outline" onClick={handleResetSections}>ใช้ช่วงตาม Drawing</button>
+          <button className="btn btn-outline" onClick={()=>onNavigate('masterdata')}>แก้ Alignment และ Ratio</button>
+          <button className="btn btn-outline" onClick={onToggleWorkspace}><SlidersHorizontal size={14}/>เปิดการ์ดแก้ Ratio ด่วน</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '8px', marginTop: '10px' }}>
+          {sections.map((sec, idx) => (
+            <div key={sec.id || idx} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', fontSize: '0.8rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <strong style={{ color: '#38bdf8' }}>{sec.code} · {sec.name || sec.code}</strong>
+                <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: sec.isLocked !== false ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)', color: sec.isLocked !== false ? '#fcd34d' : '#d8b4fe' }}>
+                  {sec.isLocked !== false ? `Ratio ${sec.ratio?.un??1}:${sec.ratio?.rt??1}:${sec.ratio?.lt??1}` : 'AI Auto'}
+                </span>
+              </div>
+              <div style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '0.74rem' }}>
+                STA: {sec.startSTA} → {sec.endSTA}
+              </div>
+              <div style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '0.74rem' }}>
+                {sec.direction === 'right' ? 'โค้งขวา' : sec.direction === 'left' ? 'โค้งซ้าย' : 'ทางตรง'} (R={sec.radius}m) · อนุญาต: {(sec.allowedTypes||['U','R','L']).join('/')}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </details>
     <div className="planner-workbench">

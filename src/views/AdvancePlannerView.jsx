@@ -336,8 +336,16 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
   const tableRings = summary.assessed.filter(r => resultFilter==='all' || resultFilter==='issues' && r.level!=='normal' || r.issues.some(i=>i.code===resultFilter)).map(r=>r.ring);
   const showIssues = filter => { setResultFilter(filter); setActiveSubTab('table'); };
 
-  const compactWorkspace = localStorage.getItem('tbm_legacy_workspace') !== '1';
+  const [compactWorkspace, setCompactWorkspace] = useState(() => localStorage.getItem('tbm_legacy_workspace') !== '1');
+  const toggleWorkspace = () => {
+    setCompactWorkspace(prev => {
+      const next = !prev;
+      localStorage.setItem('tbm_legacy_workspace', next ? '0' : '1');
+      return next;
+    });
+  };
   if (compactWorkspace) return <SegmentPlanningWorkspace
+    onToggleWorkspace={toggleWorkspace}
     track={track} onNavigate={onNavigate} inputErrors={inputErrors} needsRecalc={needsRecalc} appliedSuccess={appliedSuccess} saving={saving}
     handleCalculate={handleCalculate} handleBatchSave={handleBatchSave} handleExportCSV={handleExportCSV} handleResetSections={handleResetSections}
     currentSTA={currentSTA} changeCurrentSTA={value=>{setCurrentSTA(value);setRecovery(previous=>({...previous,initialStateConfirmed:false}));markDirty();}}
@@ -359,6 +367,7 @@ export default function AdvancePlannerView({ ringLogs = [], onBatchSave = () => 
       <PageHeader eyebrow={`Alignment planning · ${track==='EB'?'TBM1':'TBM2'} · DTA simulator`} title={`วางแผนแนวอุโมงค์ ${track==='EB'?'TBM1 (EB)':'TBM2 (WB)'}`} description="ดูสถานะทั้งแผน เลือกริงเพื่อตรวจรายละเอียด และแยกผลคาดการณ์ออกจากค่าตรวจสนาม" actions={<>
         <button className="btn btn-outline" onClick={()=>onNavigate('position')}>ดูภาพตำแหน่งหัวเจาะ</button>
         <button className="btn btn-outline" onClick={()=>onNavigate('soil')}>เปิดข้อมูลชั้นดิน</button>
+        <button className="btn btn-outline" onClick={toggleWorkspace}><SlidersHorizontal size={16}/>สลับเป็นมุมมองกระชับ</button>
         <button className="btn btn-acc" onClick={handleCalculate}>{needsRecalc?'คำนวณใหม่จากค่าที่แก้':'คำนวณแผน'}</button>
         <button className="btn btn-outline" onClick={handleBatchSave} disabled={needsRecalc||saving||!planResult.plannedRings.length}>{saving?'กำลังบันทึก…':'เก็บเป็นแผนคาดการณ์'}</button>
       </>}/>

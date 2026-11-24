@@ -16,7 +16,10 @@ export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   const [hSections, setHSections] = useState(() => {
     try {
       const saved = localStorage.getItem(`tbm_horizontal_alignment_${track}`);
-      if (saved) return normalizeGapSettings(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
       const session = JSON.parse(localStorage.getItem(`tbm_advance_session_${track}`) || '{}');
       if (Array.isArray(session.sections) && session.sections.length) return session.sections;
       const legacy = localStorage.getItem('tbm_horizontal_alignment');
@@ -46,7 +49,7 @@ export default function MasterDataView({ onNavigate = () => {}, track='EB' }) {
   const [gapSettings, setGapSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('tbm_gap_settings');
-      if (saved) return JSON.parse(saved);
+      if (saved) return normalizeGapSettings(JSON.parse(saved));
     } catch (e) {
       console.error(e);
     }
